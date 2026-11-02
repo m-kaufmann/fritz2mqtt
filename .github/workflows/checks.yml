@@ -23,9 +23,3 @@ jobs:
       - run: python -m pip install esphome==2026.10.1
       - run: esphome config firmware/esp32.yaml
       - run: esphome compile firmware/esp32.yaml
-      - uses: actions/upload-artifact@v4
-        with:
-          name: esp32-development-build
-          path: firmware/.esphome/build/fritz2mqtt/.pioenvs/fritz2mqtt/firmware*.bin
-          if-no-files-found: error
-          retention-days: 7

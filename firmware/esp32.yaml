@@ -19,9 +19,9 @@ ota:
   - platform: esphome
 wifi:
   reboot_timeout: 0s
-  ap_timeout: 60s
   ap:
     ssid: FRITZ2MQTT Setup
+    ap_timeout: 60s
 captive_portal:
 web_server:
   port: 80
