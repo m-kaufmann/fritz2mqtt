@@ -1,0 +1,31 @@
+name: Gateway checks
+on: [push, pull_request, workflow_dispatch]
+permissions:
+  contents: read
+jobs:
+  host-tests:
+    runs-on: macos-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: bash tools/test.sh
+  firmware:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install esphome==2026.10.1
+      - run: esphome config firmware/esp32.yaml
+      - run: esphome compile firmware/esp32.yaml
+      - uses: actions/upload-artifact@v4
+        with:
+          name: esp32-development-build
+          path: firmware/.esphome/build/fritz2mqtt/.pioenvs/fritz2mqtt/firmware*.bin
+          if-no-files-found: error
+          retention-days: 7

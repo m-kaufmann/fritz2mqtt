@@ -1,0 +1,41 @@
+# Generic factory build: configure credentials and topics in the gateway UI.
+substitutions:
+  name: fritz2mqtt
+esphome:
+  name: ${name}
+  name_add_mac_suffix: true
+  friendly_name: FRITZ2MQTT
+  min_version: 2026.10.1
+  project:
+    name: m-kaufmann.fritz2mqtt
+    version: 0.1.0-dev
+esp32:
+  board: esp32dev
+  flash_size: 4MB
+  framework:
+    type: esp-idf
+logger:
+ota:
+  - platform: esphome
+wifi:
+  reboot_timeout: 0s
+  ap_timeout: 60s
+  ap:
+    ssid: FRITZ2MQTT Setup
+captive_portal:
+web_server:
+  port: 80
+  version: 3
+  local: true
+  log: true
+  ota: false
+external_components:
+  - source:
+      type: local
+      path: ../components
+    components: [fritzbox_aha]
+fritzbox_aha:
+  id: fritz_gateway
+  update_interval: 60s
+packages:
+  status_leds: !include ../packages/status-leds.yaml
