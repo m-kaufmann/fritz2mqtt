@@ -6,6 +6,8 @@
 #include "esp_http_client.h"
 #include "esp_log.h"
 #include "esp_timer.h"
+#include "esp_system.h"
+#include "esp_wifi.h"
 #include "esphome/core/log.h"
 
 namespace esphome::fritzbox_aha {
@@ -117,7 +119,7 @@ void FritzboxAha::execute_command_(const Command &command) {
   auto config = config_copy_();
   const auto *mapping = gateway::find(*config, command.ain);
   uint32_t encoded;
-  if (!mapping || !mapping->enabled || config->revision != command.revision ||
+  if (!network_ready_.load() || !mapping || !mapping->enabled || config->revision != command.revision ||
       !protocol::encode_target(command.target, encoded) || worker_millis() - command.created_at > 15000 ||
       (retry_at_ && static_cast<int32_t>(worker_millis() - retry_at_) < 0)) {
     command_result_("Nicht gesendet: Auftrag ungueltig, veraltet oder Verbindung in Wartezeit"); return;
@@ -187,7 +189,9 @@ FritzboxAha::HttpResult FritzboxAha::http_(const std::string &path, const std::s
   const auto url = "http://" + host_ + path;
   esp_http_client_config_t config = {};
   config.url = url.c_str();
-  config.timeout_ms = 4000;
+  // The router can take more than four seconds to start its login response.
+  // Keep the network wait bounded inside the existing 20-second request budget.
+  config.timeout_ms = 8000;
   config.disable_auto_redirect = true;
   config.buffer_size = 1024;
   config.buffer_size_tx = 1024;
@@ -211,20 +215,29 @@ FritzboxAha::HttpResult FritzboxAha::http_(const std::string &path, const std::s
   esp_http_client_set_method(client, is_post ? HTTP_METHOD_POST : HTTP_METHOD_GET);
   if (is_post) esp_http_client_set_header(client, "Content-Type", "application/x-www-form-urlencoded");
   const auto started = worker_millis();
+  int last_read = 0;
+  auto remaining_timeout = [&]() {
+    const uint32_t elapsed = worker_millis() - started;
+    if (elapsed >= 20000) { result.error = ESP_ERR_TIMEOUT; return false; }
+    esp_http_client_set_timeout_ms(client, std::min<uint32_t>(8000, 20000 - elapsed));
+    return true;
+  };
   result.stage = "connect";
   result.error = esp_http_client_open(client, post.size());
   bool ok = result.error == ESP_OK;
   if (ok && is_post) {
     result.stage = "write";
     size_t sent = 0;
-    while (sent < post.size() && worker_millis() - started < 20000) {
+    while (sent < post.size()) {
+      if (!remaining_timeout()) { ok = false; break; }
       int n = esp_http_client_write(client, post.data() + sent, post.size() - sent);
-      if (n <= 0) { ok = false; break; }
+      if (n <= 0) { result.error = n < 0 ? n : ESP_FAIL; ok = false; break; }
       sent += n;
     }
     ok = ok && sent == post.size();
   }
   int64_t length = 0;
+  if (ok && !remaining_timeout()) ok = false;
   if (ok) {
     result.stage = "headers";
     length = esp_http_client_fetch_headers(client);
@@ -242,8 +255,9 @@ FritzboxAha::HttpResult FritzboxAha::http_(const std::string &path, const std::s
       result.complete = true;
       break;
     }
-    if (worker_millis() - started >= 20000) { ok = false; break; }
+    if (!remaining_timeout()) { ok = false; break; }
     int n = esp_http_client_read(client, buffer, sizeof(buffer));
+    last_read = n;
     if (n <= 0) {
       if (framing.chunked) result.complete = n >= 0 && esp_http_client_is_complete_data_received(client);
       else if (framing.has_length) result.complete = result.body.size() == static_cast<size_t>(length);
@@ -252,11 +266,44 @@ FritzboxAha::HttpResult FritzboxAha::http_(const std::string &path, const std::s
       // well-formed XML, so a truncated/partial body can never become a success.
       break;
     }
-    if (result.body.size() + n > 65536) { ok = false; break; }
+    if (result.body.size() + n > 65536) { result.error = ESP_ERR_INVALID_SIZE; ok = false; break; }
     result.body.append(buffer, n);
     vTaskDelay(1);
   }
   result.complete = ok && result.complete;
+  if (!result.complete && result.error == ESP_OK) result.error = last_read < 0 ? last_read : ESP_FAIL;
+  // Never log path, headers, response bodies, credentials or session identifiers.
+  // A close-delimited response can finish with a native negative read/errno;
+  // completeness and XML validation, not that raw code alone, decide success.
+  const char *operation = path.find("switchcmd=sethkrtsoll") != std::string::npos ? "set-target" :
+      path.find("switchcmd=getdevicelistinfos") != std::string::npos ? "devices" :
+      is_post ? "login/session" : "challenge";
+  wifi_ap_record_t ap{};
+  const bool wifi_connected = esp_wifi_sta_get_ap_info(&ap) == ESP_OK;
+  const int socket_error = esp_http_client_get_errno(client);
+  const uint32_t elapsed = worker_millis() - started;
+  HttpObservation observation;
+  observation.operation = operation; observation.phase = result.stage;
+  observation.at_ms = worker_millis(); observation.elapsed_ms = elapsed;
+  observation.bytes = result.body.size(); observation.heap = esp_get_free_heap_size();
+  observation.status = result.status; observation.error = result.error;
+  observation.socket_error = socket_error; observation.last_read = last_read;
+  observation.rssi = wifi_connected ? ap.rssi : 0;
+  observation.complete = result.complete; observation.wifi_connected = wifi_connected;
+  const bool failed = !result.complete || result.status != 200;
+  xSemaphoreTake(web_mutex_, portMAX_DELAY);
+  ++web_http_requests_; web_http_last_ = observation;
+  if (failed) { ++web_http_failures_; web_http_failure_ = observation; }
+  xSemaphoreGive(web_mutex_);
+  if (failed) {
+    ESP_LOGW(TAG, "HTTP %s: phase=%s status=%d complete=%d bytes=%u elapsed=%u ms error=%d errno=%d read=%d wifi=%d rssi=%d heap=%u",
+             operation, result.stage, result.status, result.complete, static_cast<unsigned>(result.body.size()),
+             static_cast<unsigned>(elapsed), result.error, socket_error, last_read, wifi_connected,
+             wifi_connected ? ap.rssi : 0, static_cast<unsigned>(esp_get_free_heap_size()));
+  } else {
+    ESP_LOGD(TAG, "HTTP %s: status=200 complete=1 bytes=%u elapsed=%u ms read=%d errno=%d",
+             operation, static_cast<unsigned>(result.body.size()), static_cast<unsigned>(elapsed), last_read, socket_error);
+  }
   esp_http_client_close(client);
   esp_http_client_cleanup(client);
   return result;
@@ -397,6 +444,7 @@ bool FritzboxAha::discover_devices_() {
 }
 
 void FritzboxAha::cycle_() {
+  if (!network_ready_.load()) return;
   if (retry_at_ && static_cast<int32_t>(worker_millis() - retry_at_) < 0) return;
   if (password_.empty() || username_.empty()) {
     report_("FRITZ!Box-Zugangsdaten fehlen", false, false);

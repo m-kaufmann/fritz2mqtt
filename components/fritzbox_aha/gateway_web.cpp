@@ -93,7 +93,12 @@ void FritzboxAha::wifi_loop_() {
   // Migration: keep the already functioning network without reading it back
   // through HTTP. It becomes part of NVS on the next configuration save.
   auto *wifi = wifi::global_wifi_component;
-  if (!wifi->is_connected()) return;
+  const bool connected = wifi->is_connected();
+  const bool was_connected = network_ready_.exchange(connected);
+  // Start only after association AND IP configuration. Do not wait for a poll
+  // interval after boot/reconnect, and do not count missing WiFi as an AHA error.
+  if (connected && !was_connected) update();
+  if (!connected) return;
   xSemaphoreTake(web_mutex_, portMAX_DELAY);
   if (!runtime_config_->wifi_configured && runtime_config_->wifi[0].ssid.empty()) {
     auto sta = wifi->get_sta();
@@ -280,6 +285,19 @@ std::string FritzboxAha::status_json_() {
     r["connected"] = web_last_.connected; r["authenticated"] = web_last_.authenticated;
     r["fresh"] = fresh; r["diagnostic"] = web_last_.diagnostic; r["method"] = web_last_.method;
     r["device_count"] = web_last_.device_count; r["uptime"] = web_millis()/1000;
+    auto http = r["http"].to<JsonObject>();
+    http["requests"] = web_http_requests_; http["failures"] = web_http_failures_;
+    auto observation = [&](JsonObject row, const HttpObservation &h) {
+      row["operation"] = h.operation; row["phase"] = h.phase;
+      row["at_ms"] = h.at_ms; row["elapsed_ms"] = h.elapsed_ms;
+      row["status"] = h.status; row["complete"] = h.complete;
+      row["bytes"] = h.bytes; row["error"] = h.error; row["errno"] = h.socket_error;
+      row["read"] = h.last_read; row["wifi_connected"] = h.wifi_connected;
+      row["rssi"] = h.rssi; row["free_heap"] = h.heap;
+    };
+    observation(http["last"].to<JsonObject>(), web_http_last_);
+    if (web_http_failures_) observation(http["last_failure"].to<JsonObject>(), web_http_failure_);
+    else http["last_failure"] = nullptr;
     r["mqtt"] = mqtt_status_text_;
     r["mqtt_connected"] = mqtt_connected_.load();
     r["mqtt_rx"] = mqtt_rx_.load(); r["mqtt_ignored"] = mqtt_ignored_.load();

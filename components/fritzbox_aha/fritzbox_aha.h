@@ -101,10 +101,19 @@ class FritzboxAha : public PollingComponent, public AsyncWebHandler {
   std::shared_ptr<const gateway::Config> runtime_config_;
   uint32_t applied_revision_ = 0;
   Snapshot web_last_;
+  // Numeric, secret-free HTTP evidence survives later successful requests until reboot.
+  struct HttpObservation {
+    const char *operation = "none", *phase = "none";
+    uint32_t at_ms = 0, elapsed_ms = 0, bytes = 0, heap = 0;
+    int status = 0, error = 0, socket_error = 0, last_read = 0, rssi = 0;
+    bool complete = false, wifi_connected = false;
+  };
+  HttpObservation web_http_last_, web_http_failure_;
+  uint32_t web_http_requests_ = 0, web_http_failures_ = 0;
   uint32_t web_observation_at_ = 0, web_revision_ = 0;
   std::vector<protocol::Thermostat> discovered_, web_devices_;
   std::string web_command_ain_, web_command_message_ = "Bereit", active_command_ain_, csrf_token_;
-  std::atomic<bool> wifi_apply_requested_{false};
+  std::atomic<bool> wifi_apply_requested_{false}, network_ready_{false};
   void apply_wifi_();
   void wifi_loop_();
   struct MqttInput {
