@@ -62,3 +62,8 @@ Unter **Diagnose** FRITZ!Box-Anmeldung, aktuelle Messwerte und MQTT-Verbindung p
 Unter **System / Firmware** werden installierte und angebotene Version sowie der Kanal angezeigt. **Nach Updates suchen** installiert nichts. Erst die Bestätigung der angebotenen Version und **Update installieren** starten den Download und anschließend einen Neustart. Währenddessen nicht mehrfach absenden. Nach dem Neustart muss dieselbe Gerätekennung die Zielversion melden. Details: [Firmwareupdates](updates.md).
 
 Eine als Vorabversion veröffentlichte Testfirmware ist keine allgemeine stabile Freigabe. Ein fehlendes Updateangebot oder ein noch nicht veröffentlichter Kanal darf nicht durch eine frei eingegebene Download-URL umgangen werden.
+
+
+## Erprobter OTA-Ablauf
+
+Am 02.11.2026 wurde am separaten ESP32 mit 4 MB Flash der vollständige Weg `0.1.0-dev` → `0.1.0` erprobt: Testangebot suchen, konkrete Version bestätigen, Installation starten, Fortschritt abwarten und nach Neustart die bestätigte Version prüfen. Der ESP lud die Firmware selbst über HTTPS herunter; die Einrichtung blieb erhalten. Das [Testpaket v0.1.0-test.1](https://github.com/m-kaufmann/fritz2mqtt/releases/tag/v0.1.0-test.1) gehört ausschließlich zum Testkanal, nicht zu einer stabilen Freigabe. Die enthaltene Factory-Datei startet ebenfalls im Testkanal. Nach Installation derselben Version ist kein weiteres Update zu erwarten.

@@ -2,7 +2,7 @@
 
 Ein eigenständiges ESP32-Gateway zwischen FRITZ!Box-Heizkörperthermostaten und MQTT. Die FRITZ!Box übernimmt DECT; der ESP32 liest ihre lokale AHA-Schnittstelle und übersetzt MQTT-Stellaufträge. Weder Home Assistant noch ein bestimmtes übergeordnetes Automationssystem sind zum Betrieb erforderlich.
 
-**Entwicklungsstand:** Herauslösung des Gateway-Kerns. Noch keine freigegebene universelle Firmware und keine vollständige Abhängigkeits-Lizenzsammlung. Installation derzeit aus den Quellen; die neue generische Zusammenstellung benötigt noch einen vollständigen Firmware- und Hardwaretest.
+**Entwicklungsstand:** Eigenständiger Gateway-Kern mit separatem OTA-Testkanal. Das [erste Testpaket](https://github.com/m-kaufmann/fritz2mqtt/releases/tag/v0.1.0-test.1) enthält Firmware, zugehörige Quellen, Lizenztexte und Prüfsummen. Noch keine allgemeine stabile Freigabe; offene Hardwareprüfungen sind in der Updatebeschreibung dokumentiert.
 
 ## Funktionen
 
@@ -51,7 +51,7 @@ Der MQTT-Host ist ein Hostname ohne `http://`. Rückmeldungen: QoS 1, retained. 
 
 [Entwicklungs-/Releaseplan](docs/releases.md), [Lizenzhinweise](THIRD_PARTY_NOTICES.md), [Änderungsprotokoll](CHANGELOG.md).
 
-Vor Veröffentlichung fertiger Firmware: vollständiger Build, Tests auf Hardware, Lizenzinventar der tatsächlich eingebundenen Abhängigkeiten, Wiederherstellung und Erhalt bestehender Konfiguration prüfen. Der Tab „System / Firmware“ implementiert die HTTPS-Updateprüfung und eine ausdrücklich bestätigte Installation; siehe [Updatebeschreibung](docs/updates.md). Der stabile Updatekanal ist noch nicht veröffentlicht und echte OTA-Tests stehen aus.
+Vor Veröffentlichung fertiger Firmware: vollständiger Build, Tests auf Hardware, Lizenzinventar der tatsächlich eingebundenen Abhängigkeiten, Wiederherstellung und Erhalt bestehender Konfiguration prüfen. Der Tab „System / Firmware“ implementiert die HTTPS-Updateprüfung und eine ausdrücklich bestätigte Installation; siehe [Updatebeschreibung](docs/updates.md). Der stabile Updatekanal ist noch nicht veröffentlicht; Testkanal und Hardwareprüfstand sind dort getrennt dokumentiert.
 
 Hosttests auf macOS: `bash tools/test.sh` (Python 3, clang++, Expat und Node.js). Linux-Firmwarebuilds verwenden die tatsächlichen ESP-IDF-Bibliotheken; die CommonCrypto-Adapter unter `tests/mbedtls/` gehören ausschließlich zu den macOS-Hosttests.
 
