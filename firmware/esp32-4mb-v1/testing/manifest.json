@@ -1,13 +1,13 @@
 {
   "name": "FRITZ2MQTT · OTA-Testkanal",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "builds": [
     {
       "chipFamily": "ESP32",
       "ota": {
-        "md5": "c8c093c688ca398a9cbcd92651e0d0db",
-        "path": "https://m-kaufmann.github.io/fritz2mqtt/firmware/esp32-4mb-v1/0.1.0/firmware.ota.bin",
-        "release_url": "https://github.com/m-kaufmann/fritz2mqtt/releases/tag/v0.1.0-test.1",
+        "md5": "5ab2ebb89c6552688420ec008c18884c",
+        "path": "https://m-kaufmann.github.io/fritz2mqtt/firmware/esp32-4mb-v1/0.1.1/firmware.ota.bin",
+        "release_url": "https://github.com/m-kaufmann/fritz2mqtt/releases/tag/v0.1.1-test.1",
         "summary": "OTA-Testversion; keine allgemeine stabile Freigabe"
       }
     }
