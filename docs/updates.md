@@ -28,3 +28,7 @@ Vollständiges Lizenzinventar, freigegebenes Quell-/Firmwarepaket mit Manifest, 
 ## Lokale Prüfung des Änderungspakets
 
 02.11.2026: fünf C++-Testgruppen mit ASan/UBSan erfolgreich. Die neue Update-Policy prüft Versionsrückschritte, gleiche Versionen, falsche/unsichere Quelle, falsches Hardwareprofil, fehlende Prüfsumme, abgelaufene Prüfung, Fehler-/Beschäftigtzustände und Zeitgeberüberlauf. ESPHome 2026.10.1 akzeptiert das Profil mit Updatekomponenten und erzeugt den C++-Code. JavaScript-Syntaxprüfung erfolgreich. Der vollständige CI-Build und die browsergestützte Prüfung werden vor Abnahme zusätzlich dokumentiert.
+
+Browser-Simulation: Installationsknopf vor Bestätigung gesperrt, danach freigegeben; während Installation Knopf/Checkbox/erneute Prüfung gesperrt; Fortschritt sichtbar; nach simuliertem Neustart am selben Gerät Zielversion bestätigt und erneute Installation gesperrt. Testwerkzeug: `python3 tools/preview_updates.py`, ausschließlich 127.0.0.1, keine Geräte-/Brokerverbindung.
+
+Neuer ESP32-Testaufbau: USB-C/CH340, ESP32-D0WD-V3, 4 MB Flash. Lokaler vollständiger Build und erste USB-Installation mit vorheriger Chip-/MAC-/Flashgrößenprüfung sowie anschließender Hashverifikation erfolgreich. Start von ESPHome 2026.10.1 / Projekt 0.1.0-dev und Einrichtungs-AP mit Adresse 192.168.4.1 über serielles Log bestätigt. Netzwerk- und echte Pull-OTA-Abnahme noch ausstehend. Die hierfür verwendeten individuellen Kennungen und Logs bleiben außerhalb des öffentlichen Projekts.

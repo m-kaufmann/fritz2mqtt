@@ -63,7 +63,7 @@ function renderFirmware(){
  else if(dirty)fwMessage('Vor der Installation die ungespeicherten Einstellungen speichern oder neu laden.');
  else fwMessage(f.can_install?'Neue Version verfügbar. Zum Installieren unten bestätigen.':f.latest&&f.latest!==f.current?f.reason:f.message||'Noch keine erfolgreiche Updateprüfung.');
 }
-async function refreshFirmware(){if(fwLoading)return;fwLoading=true;try{fwData=await api('firmware');renderFirmware();}catch(e){$('fw-check').disabled=true;$('fw-install').disabled=true;$('fw-confirm').disabled=true;fwMessage(fwExpected?'Gateway wird neu verbunden. Das Update wird nicht erneut gesendet.':'Firmwarestatus nicht erreichbar: '+e.message,fwExpected?'':'error');}finally{fwLoading=false;}}
+async function refreshFirmware(){if(fwLoading)return;fwLoading=true;try{fwData=await api('firmware');renderFirmware();}catch(e){$('fw-check').disabled=true;$('fw-install').disabled=true;$('fw-confirm').disabled=true;if(fwExpected&&Date.now()-fwExpected.started>120000){clearExpected();fwOutcome='Gateway nach dem Update noch nicht erreichbar. Ergebnis offen; installierte Version später prüfen.';}fwMessage(fwOutcome||(fwExpected?'Gateway wird neu verbunden. Das Update wird nicht erneut gesendet.':'Firmwarestatus nicht erreichbar: '+e.message),fwExpected?'':'error');}finally{fwLoading=false;}}
 $('fw-confirm').onchange=renderFirmware;
 $('fw-check').onclick=async()=>{if(fwBusy)return;fwBusy=true;fwOutcome='';renderFirmware();try{await api('firmware/check',{});}catch(e){fwOutcome=e.message;}finally{fwBusy=false;await refreshFirmware();}};
 $('fw-install').onclick=async()=>{
