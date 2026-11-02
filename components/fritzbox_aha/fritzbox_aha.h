@@ -29,6 +29,7 @@ class FritzboxAha : public PollingComponent, public AsyncWebHandler {
 #ifdef USE_FRITZ2MQTT_UPDATE
   void set_firmware_update(http_request::HttpRequestUpdate *v) { firmware_update_ = v; }
 #endif
+  void set_firmware_channel(const std::string &v) { firmware_channel_ = v; }
   void set_storage_namespace(const std::string &v) { storage_namespace_ = v; }
   void set_host(const std::string &v) { host_ = v; }
   void set_username(const std::string &v) { username_ = v; }
@@ -63,6 +64,7 @@ class FritzboxAha : public PollingComponent, public AsyncWebHandler {
   float get_setup_priority() const override { return setup_priority::WIFI + 1.0f; }
 
  private:
+  std::string firmware_channel_ = "stable";
   firmware::Candidate firmware_state_;
   float firmware_progress_ = 0;
   std::atomic<int> firmware_action_{0};

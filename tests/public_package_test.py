@@ -36,6 +36,14 @@ class PublicPackage(unittest.TestCase):
         self.assertIn('"config_v1"', source)
         self.assertIn('set_storage_namespace', (COMPONENT / 'fritzbox_aha.h').read_text())
 
+    def test_separate_test_channel(self):
+        test_profile = (ROOT/'firmware/esp32-test.yaml').read_text()
+        self.assertIn('/testing/manifest.json', test_profile)
+        self.assertIn('firmware_channel: testing', test_profile)
+        stable = (ROOT/'firmware/esp32.yaml').read_text()
+        self.assertIn('/stable/manifest.json', stable)
+        self.assertNotIn('/testing/', stable)
+
     def test_page_and_topic_suggestions(self):
         page = (COMPONENT / 'gateway.html').read_text()
         embedded = (COMPONENT / 'gateway_page.h').read_text().split('R"F2M(\n', 1)[1].split('\n)F2M";', 1)[0]

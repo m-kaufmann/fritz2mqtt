@@ -107,6 +107,7 @@ std::string FritzboxAha::firmware_json_() {
     r["enabled"] = firmware_update_ != nullptr;
 #endif
     r["current"] = firmware_state_.current; r["latest"] = firmware_state_.latest;
+    r["channel"] = firmware_channel_;
     r["profile"] = "esp32-4mb-v1"; r["device"] = get_mac_address();
     r["failed"] = firmware_state_.failed;
     r["checking"] = firmware_state_.checking || firmware_action_ == 1;

@@ -19,6 +19,10 @@ Ein eigenständiges ESP32-Gateway zwischen FRITZ!Box-Heizkörperthermostaten und
 
 AZ-Delivery Dev Kit C / ESP32-WROOM-32; Buildprofil zunächst ESP32 mit 4 MB Flash. [Schaltplan](hardware/wiring.svg), [Gehäuse-STL](hardware/enclosure.stl), [Aufbau](hardware/README.md).
 
+## Ersteinrichtung
+
+Die [Schritt-für-Schritt-README zur Erstinstallation](docs/first-install.md) beschreibt USB-Erkennung, Boardprüfung, Factory-Datei, AP, zwei WLAN-Profile, FRITZ!Box, MQTT und Firmwareupdates anhand des erprobten Ablaufs.
+
 ## Aus Quellen installieren
 
 Mit **ESPHome 2026.10.1**:

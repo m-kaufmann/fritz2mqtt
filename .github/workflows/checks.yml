@@ -1,5 +1,12 @@
 name: Gateway checks
-on: [push, pull_request, workflow_dispatch]
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+concurrency:
+  group: gateway-${{ github.head_ref || github.ref }}
+  cancel-in-progress: true
 permissions:
   contents: read
 jobs:
@@ -22,4 +29,5 @@ jobs:
           python-version: '3.12'
       - run: python -m pip install esphome==2026.10.1
       - run: esphome config firmware/esp32.yaml
+      - run: esphome config firmware/esp32-test.yaml
       - run: esphome compile firmware/esp32.yaml

@@ -13,6 +13,7 @@ FritzboxAha = ns.class_("FritzboxAha", cg.PollingComponent)
 
 CONFIG_SCHEMA = cv.Schema({
     cv.Optional("storage_namespace", default="fritz2mqtt"): cv.All(cv.string_strict, vol.Match(r"^[A-Za-z0-9_]{1,15}$")),
+    cv.Optional("firmware_channel", default="stable"): cv.one_of("stable", "testing"),
     cv.Optional("firmware_update"): cv.use_id(HttpRequestUpdate),
     cv.GenerateID(): cv.declare_id(FritzboxAha),
     cv.Optional("host", default="0.0.0.0"): cv.ipv4address,
@@ -50,6 +51,7 @@ async def to_code(config):
         cg.add_define("USE_FRITZ2MQTT_UPDATE")
         updater = await cg.get_variable(config["firmware_update"])
         cg.add(var.set_firmware_update(updater))
+    cg.add(var.set_firmware_channel(config["firmware_channel"]))
     cg.add(var.set_storage_namespace(config["storage_namespace"]))
     cg.add(var.set_host(str(config["host"])))
     cg.add(var.set_username(config[CONF_USERNAME]))
