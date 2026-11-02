@@ -2,9 +2,8 @@
 
 Writes outside the repository; never reads device configuration or user secrets.
 """
-import argparse, hashlib, io, json, re, subprocess, tarfile
+import argparse, hashlib, io, json, posixpath, re, subprocess, tarfile
 from pathlib import Path
-import esphome
 
 ROOT=Path(__file__).resolve().parents[1]
 def sha(path):return hashlib.sha256(path.read_bytes()).hexdigest()
@@ -13,10 +12,12 @@ def allowed(member):
     if any(p in ('.git','__pycache__','.DS_Store','build','node_modules') or p.startswith('.esphome') for p in parts):return None
     if member.name.endswith(('.pyc','.log')):return None
     if member.issym() or member.islnk():
-        if Path(member.linkname).is_absolute() or '..' in Path(member.linkname).parts:raise ValueError('External source symlink')
+        target = posixpath.normpath(posixpath.join(posixpath.dirname(member.name), member.linkname))
+        if Path(member.linkname).is_absolute() or target.split('/')[0] != member.name.split('/')[0]:raise ValueError('External source symlink')
     member.uid=member.gid=0;member.uname=member.gname='';return member
 
 def main():
+    import esphome
     parser=argparse.ArgumentParser();parser.add_argument('--version',required=True);parser.add_argument('--build',type=Path,required=True);parser.add_argument('--output',type=Path,required=True);args=parser.parse_args()
     if not re.fullmatch(r'(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)',args.version):parser.error('Numeric version required')
     if subprocess.check_output(['git','status','--porcelain'],cwd=ROOT,text=True):parser.error('Commit the exact public source before packaging')
