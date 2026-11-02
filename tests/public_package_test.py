@@ -1,5 +1,6 @@
 """Offline boundaries and consistency checks for the standalone source package."""
 import re
+import subprocess
 import unittest
 from pathlib import Path
 
@@ -10,9 +11,11 @@ class PublicPackage(unittest.TestCase):
     def test_no_private_application_or_device_archives(self):
         for name in ['Integration', 'local_devices', 'heizung_include', 'joomla_extensions', 'work']:
             self.assertFalse((ROOT / name).exists(), name)
-        for folder in ['components', 'firmware', 'packages', 'hardware']:
-            for path in (ROOT / folder).rglob('*'):
-                self.assertNotIn(path.suffix, ['.heic', '.php', '.sql', '.pem', '.key', '.bin'])
+        # Check the actual publication set, including forced-added ignored files.
+        # Locally generated, ignored firmware files are intentionally not published.
+        paths = subprocess.check_output(['git', 'ls-files', '--cached', '--others', '--exclude-standard'], cwd=ROOT, text=True).splitlines()
+        for name in paths:
+            self.assertNotIn(Path(name).suffix, ['.heic', '.php', '.sql', '.pem', '.key', '.bin'])
 
     def test_factory_is_unconfigured(self):
         source = (COMPONENT / '__init__.py').read_text()
