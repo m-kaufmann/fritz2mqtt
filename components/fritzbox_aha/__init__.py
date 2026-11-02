@@ -3,6 +3,7 @@ import voluptuous as vol
 import esphome.codegen as cg
 import esphome.config_validation as cv
 from esphome.components import binary_sensor, sensor, text_sensor, esp32, socket
+from esphome.components.http_request.update import HttpRequestUpdate
 from esphome.const import CONF_ID, CONF_PASSWORD, CONF_USERNAME
 
 DEPENDENCIES = ["esp32", "wifi", "web_server"]
@@ -12,6 +13,7 @@ FritzboxAha = ns.class_("FritzboxAha", cg.PollingComponent)
 
 CONFIG_SCHEMA = cv.Schema({
     cv.Optional("storage_namespace", default="fritz2mqtt"): cv.All(cv.string_strict, vol.Match(r"^[A-Za-z0-9_]{1,15}$")),
+    cv.Optional("firmware_update"): cv.use_id(HttpRequestUpdate),
     cv.GenerateID(): cv.declare_id(FritzboxAha),
     cv.Optional("host", default="0.0.0.0"): cv.ipv4address,
     cv.Optional(CONF_USERNAME, default=""): cv.string_strict,
@@ -44,6 +46,10 @@ CONFIG_SCHEMA = cv.All(
 async def to_code(config):
     var = cg.new_Pvariable(config[CONF_ID])
     await cg.register_component(var, config)
+    if "firmware_update" in config:
+        cg.add_define("USE_FRITZ2MQTT_UPDATE")
+        updater = await cg.get_variable(config["firmware_update"])
+        cg.add(var.set_firmware_update(updater))
     cg.add(var.set_storage_namespace(config["storage_namespace"]))
     cg.add(var.set_host(str(config["host"])))
     cg.add(var.set_username(config[CONF_USERNAME]))

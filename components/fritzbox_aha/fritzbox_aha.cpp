@@ -17,6 +17,7 @@ void FritzboxAha::setup() {
   esp_log_level_set("HTTP_CLIENT", ESP_LOG_NONE);
   init_web_();
   if (is_failed()) return;
+  firmware_setup_();
   results_ = xQueueCreate(1, sizeof(Snapshot));
   requests_ = xSemaphoreCreateBinary();
   commands_ = xQueueCreate(1, sizeof(Command));

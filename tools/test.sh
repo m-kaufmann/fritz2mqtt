@@ -4,7 +4,7 @@ cd "$(dirname "$0")/.."
 python3 tests/public_package_test.py
 out=$(mktemp -d)
 trap 'rm -rf "$out"' EXIT
-for name in protocol runtime_config mqtt http_request_body; do
+for name in protocol runtime_config mqtt http_request_body firmware_policy; do
   clang++ -std=c++17 -fsanitize=address,undefined -Wno-deprecated-declarations -I tests "tests/${name}_test.cpp" -lexpat -o "$out/$name"
   "$out/$name"
 done

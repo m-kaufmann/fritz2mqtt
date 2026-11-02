@@ -8,6 +8,10 @@
 #include "aha_protocol.h"
 #include "runtime_config.h"
 #include "http_request_body.h"
+#include "firmware_policy.h"
+#ifdef USE_FRITZ2MQTT_UPDATE
+#include "esphome/components/http_request/update/http_request_update.h"
+#endif
 #include "esphome/components/web_server_base/web_server_base.h"
 #include "esphome/core/component.h"
 #include "esphome/components/binary_sensor/binary_sensor.h"
@@ -22,6 +26,9 @@ namespace esphome::fritzbox_aha {
 
 class FritzboxAha : public PollingComponent, public AsyncWebHandler {
  public:
+#ifdef USE_FRITZ2MQTT_UPDATE
+  void set_firmware_update(http_request::HttpRequestUpdate *v) { firmware_update_ = v; }
+#endif
   void set_storage_namespace(const std::string &v) { storage_namespace_ = v; }
   void set_host(const std::string &v) { host_ = v; }
   void set_username(const std::string &v) { username_ = v; }
@@ -56,6 +63,20 @@ class FritzboxAha : public PollingComponent, public AsyncWebHandler {
   float get_setup_priority() const override { return setup_priority::WIFI + 1.0f; }
 
  private:
+  firmware::Candidate firmware_state_;
+  float firmware_progress_ = 0;
+  std::atomic<int> firmware_action_{0};
+  std::string firmware_message_ = "Updatefunktion in diesem Build nicht eingerichtet";
+  std::string firmware_expected_;
+  uint32_t firmware_check_started_ = 0;
+#ifdef USE_FRITZ2MQTT_UPDATE
+  http_request::HttpRequestUpdate *firmware_update_ = nullptr;
+#endif
+  void firmware_setup_();
+  void firmware_tick_();
+  void firmware_changed_();
+  std::string firmware_json_();
+  bool firmware_request_(bool install, const std::string &version, std::string &error);
   // The IDF HTTP server dispatches these callbacks serially on its HTTP task.
   gateway::HttpRequestBody request_body_;
   AsyncWebServerRequest *body_request_ = nullptr;

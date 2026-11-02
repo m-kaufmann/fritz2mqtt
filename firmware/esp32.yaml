@@ -15,8 +15,24 @@ esp32:
   framework:
     type: esp-idf
 logger:
+time:
+  - platform: sntp
+    id: firmware_clock
+    timezone: UTC
+http_request:
+  verify_ssl: true
+  buffer_size_rx: 4096
+  timeout: 15s
+update:
+  - platform: http_request
+    id: gateway_firmware_update
+    name: Gateway Firmware
+    internal: true
+    source: https://m-kaufmann.github.io/fritz2mqtt/firmware/esp32-4mb-v1/stable/manifest.json
+    update_interval: 6h
 ota:
   - platform: esphome
+  - platform: http_request
 wifi:
   reboot_timeout: 0s
   ap:
@@ -36,6 +52,7 @@ external_components:
     components: [fritzbox_aha]
 fritzbox_aha:
   id: fritz_gateway
+  firmware_update: gateway_firmware_update
   update_interval: 60s
 packages:
   status_leds: !include ../packages/status-leds.yaml

@@ -229,6 +229,9 @@ bool FritzboxAha::queue_temperature_(const std::string &ain, float target, std::
   const auto *mapping = gateway::find(*config, ain);
   bool ready = false;
   for (const auto &d : web_devices_) if (d.ain == ain && d.present == "1" && (d.error.empty() || d.error == "0")) ready = true;
+  if (firmware_state_.installing || firmware_action_ == 2) {
+    xSemaphoreGive(web_mutex_); error = "Firmwareinstallation aktiv"; return false;
+  }
   if ((expected_revision != UINT32_MAX && config->revision != expected_revision) ||
       !mapping || !mapping->enabled || !commands_ || !web_last_.connected || !web_last_.authenticated ||
       web_last_.device_count < 0 || web_revision_ != config->revision || web_millis() - web_observation_at_ > 120000 || !ready) {
@@ -328,6 +331,7 @@ bool FritzboxAha::canHandle(AsyncWebServerRequest *request) const {
   auto url = request->url_to(buffer);
   if (url == "/") return !request->hasParam("esphome");
   return url == "/gateway/" || url == "/gateway" || url == "/gateway/api/status" ||
+         url == "/gateway/api/firmware" || url == "/gateway/api/firmware/check" || url == "/gateway/api/firmware/install" ||
          url == "/gateway/api/mqtt-test" || url == "/gateway/api/config" || url == "/gateway/api/target" || url == "/gateway/api/poll";
 }
 
@@ -336,7 +340,7 @@ void FritzboxAha::serve_json_(AsyncWebServerRequest *request, int code, const st
   // ESPHome IDF 2026.6.4 maps most status codes (including 202) to 500.
   // Set the actual IDF status after beginResponse(), which initializes it.
   const char *status = code == 202 ? "202 Accepted" : code == 400 ? "400 Bad Request" :
-      code == 403 ? "403 Forbidden" : code == 405 ? "405 Method Not Allowed" : nullptr;
+      code == 409 ? "409 Conflict" : code == 404 ? "404 Not Found" : code == 403 ? "403 Forbidden" : code == 405 ? "405 Method Not Allowed" : nullptr;
   if (status) httpd_resp_set_status(*request, status);
   response->addHeader("Cache-Control", "no-store"); request->send(response);
 }
@@ -360,6 +364,7 @@ void FritzboxAha::handleRequest(AsyncWebServerRequest *request) {
     std::string body = json::build_json([&](JsonObject r) { r["error"] = message; }); serve_json_(request, code, body);
   };
   if (request->method() == HTTP_GET) {
+    if (url == "/gateway/api/firmware") { serve_json_(request, 200, firmware_json_()); return; }
     if (url == "/gateway/api/status") { serve_json_(request, 200, status_json_()); return; }
     if (url == "/gateway/api/config") { serve_json_(request, 200, config_json_(*config_copy_(), false)); return; }
     if (url == "/" || url == "/gateway" || url == "/gateway/") {
@@ -391,6 +396,18 @@ void FritzboxAha::handleRequest(AsyncWebServerRequest *request) {
       offset += n;
     }
   }
+  if (url == "/gateway/api/firmware/check" || url == "/gateway/api/firmware/install") {
+    const bool install = url == "/gateway/api/firmware/install";
+    std::string version, error;
+    bool valid = json::parse_json(body, [&](JsonObject r) {
+      if (!install) return r.size() == 0;
+      if (r.size() != 2 || !r["confirm"].is<bool>() || !r["confirm"].as<bool>() || !r["version"].is<const char *>()) return false;
+      version = r["version"].as<std::string>(); return version.size() <= 32;
+    });
+    if (!valid) { fail(400, "Bestaetigung und angezeigte Version erforderlich"); return; }
+    if (!firmware_request_(install, version, error)) { fail(409, error); return; }
+    serve_json_(request, 202, "{\"accepted\":true}"); return;
+  }
   if (url == "/gateway/api/mqtt-test") {
     if (!mqtt_connected_) { fail(409, "MQTT nicht verbunden"); return; }
     mqtt_test_requested_ = true;
@@ -414,7 +431,7 @@ void FritzboxAha::handleRequest(AsyncWebServerRequest *request) {
     auto old = config_copy_(); auto next = std::make_shared<gateway::Config>(); std::string error;
     if (!decode_config_(body, *old, *next, error)) { fail(400, error); return; }
     xSemaphoreTake(web_mutex_, portMAX_DELAY);
-    if (command_busy_ || next->revision != runtime_config_->revision) {
+    if (firmware_state_.installing || firmware_action_ == 2 || command_busy_ || next->revision != runtime_config_->revision) {
       xSemaphoreGive(web_mutex_); fail(409, "Auftrag aktiv oder Einrichtung inzwischen geaendert; neu laden"); return;
     }
     bool wifi_changed = next->wifi != old->wifi || next->wifi_configured != old->wifi_configured;

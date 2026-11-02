@@ -1,0 +1,30 @@
+# Firmwareupdates – Implementierung und Prüfstand
+
+Der Tab **System / Firmware** prüft das fest konfigurierte stabile Manifest und zeigt installierte/angebotene Version, Hardwareprofil und Ergebnis. Installation verlangt ein angekreuztes Bestätigungsfeld und den Klick auf „Update installieren“. Die API verlangt dieselbe konkrete Version sowie `confirm: true`, gültige Origin, CSRF-Token und JSON. Regelmäßige Updateprüfungen lösen keine Installation aus.
+
+Quelle: `https://m-kaufmann.github.io/fritz2mqtt/firmware/esp32-4mb-v1/stable/manifest.json`. Noch kein stabiler Kanal veröffentlicht. Ein nicht erreichbares Manifest wird als Fehler angezeigt und erlaubt keine Installation. GitHub Pages muss vor der ersten Freigabe eingerichtet werden.
+
+## Download und Erhalt der Konfiguration
+
+ESPHome 2026.10.1 übernimmt Manifestprüfung und HTTP-OTA. TLS-Zertifikatsprüfung bleibt aktiv, SNTP stellt die für HTTPS nötige Uhrzeit bereit. Das Gateway akzeptiert ausschließlich eine neuere numerische stabile Version `MAJOR.MINOR.PATCH` (bzw. die stabile Fassung einer laufenden `-dev`-Version), eine gültige MD5-Transportprüfsumme und exakt den passenden HTTPS-Dateipfad des Hardwareprofils. Metadaten müssen innerhalb der letzten zehn Minuten erfolgreich geprüft sein. Ein geändertes Angebot erfordert eine neue Bestätigung. MD5 ist keine Herausgebersignatur.
+
+Vor und unmittelbar bei der Ausführung werden die Freigabebedingungen erneut geprüft. Check und Installation laufen im ESPHome-Hauptloop; HTTP liest einen geschützten Statuscache. Native Fortschrittsrückmeldungen aktualisieren ihn auch während des Flashens. Laufende Thermostataufträge blockieren den Installationsstart; während einer angenommenen Installation sind neue Stellaufträge und das Speichern der Einrichtung gesperrt. Die Updatefunktion schreibt keine NVS-Konfiguration; `config_v1` und der konfigurierte Namensraum bleiben unverändert. Tatsächlichen Erhalt und Wiederanlauf am Testgerät noch prüfen.
+
+Der Browser merkt sich Zielversion und Gerätekennung nur in seiner Sitzung. Nach Verbindungsunterbrechung wird ausschließlich der Status erneut gelesen, niemals der Installationsauftrag wiederholt. Nach Neustart gilt erst die am selben Gerät zurückgemeldete Zielversion als bestätigt. Bei unklarem Ausgang bleibt die Anzeige entsprechend offen.
+
+## API
+
+- `GET /gateway/api/firmware`: Statuscache; keine Zugangsdaten, Firmware-URLs nicht frei änderbar.
+- `POST /gateway/api/firmware/check` mit `{}`: Prüfung anfordern, HTTP 202.
+- `POST /gateway/api/firmware/install` mit `{"version":"0.1.0","confirm":true}`: genau die angebotene Version freigeben, HTTP 202.
+- Ungültige Payload 400, fehlende Origin/CSRF 403, fehlende Freigabe bzw. laufender Vorgang 409.
+
+Die offene lokale Weboberfläche bleibt wie bisher ohne Benutzeranmeldung. Das ist keine kryptografische Geräteeigentümer-Authentifizierung. Der native ESPHome-OTA-Wartungsweg bleibt erhalten.
+
+## Noch vor einem stabilen Release
+
+Vollständiges Lizenzinventar, freigegebenes Quell-/Firmwarepaket mit Manifest, HTTPS-Hosting sowie Hardwaretest von Erstinstallation, Konfigurationserhalt, echtem Update, unterbrochenem Download, falscher Prüfsumme und Wiederherstellung. Keine Änderungen an Bootloader oder Partitionstabelle über diesen Updateweg. Ein automatisches Bootloader-Rollback wird nicht behauptet. Das bisherige produktive Gateway bleibt unverändert; Tests erfolgen auf einem separaten ESP32 mit 4 MB Flash.
+
+## Lokale Prüfung des Änderungspakets
+
+02.11.2026: fünf C++-Testgruppen mit ASan/UBSan erfolgreich. Die neue Update-Policy prüft Versionsrückschritte, gleiche Versionen, falsche/unsichere Quelle, falsches Hardwareprofil, fehlende Prüfsumme, abgelaufene Prüfung, Fehler-/Beschäftigtzustände und Zeitgeberüberlauf. ESPHome 2026.10.1 akzeptiert das Profil mit Updatekomponenten und erzeugt den C++-Code. JavaScript-Syntaxprüfung erfolgreich. Der vollständige CI-Build und die browsergestützte Prüfung werden vor Abnahme zusätzlich dokumentiert.

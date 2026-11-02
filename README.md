@@ -47,7 +47,7 @@ Der MQTT-Host ist ein Hostname ohne `http://`. Rückmeldungen: QoS 1, retained. 
 
 [Entwicklungs-/Releaseplan](docs/releases.md), [Lizenzhinweise](THIRD_PARTY_NOTICES.md), [Änderungsprotokoll](CHANGELOG.md).
 
-Vor Veröffentlichung fertiger Firmware: vollständiger Build, Tests auf Hardware, Lizenzinventar der tatsächlich eingebundenen Abhängigkeiten, Wiederherstellung und Erhalt bestehender Konfiguration prüfen. Selbstständiger Download mit bewusst bestätigter Installation folgt in einem weiteren Änderungspaket; derzeit gibt es dafür keinen freigegebenen Updatekanal.
+Vor Veröffentlichung fertiger Firmware: vollständiger Build, Tests auf Hardware, Lizenzinventar der tatsächlich eingebundenen Abhängigkeiten, Wiederherstellung und Erhalt bestehender Konfiguration prüfen. Der Tab „System / Firmware“ implementiert die HTTPS-Updateprüfung und eine ausdrücklich bestätigte Installation; siehe [Updatebeschreibung](docs/updates.md). Der stabile Updatekanal ist noch nicht veröffentlicht und echte OTA-Tests stehen aus.
 
 Hosttests auf macOS: `bash tools/test.sh` (Python 3, clang++, Expat und Node.js). Linux-Firmwarebuilds verwenden die tatsächlichen ESP-IDF-Bibliotheken; die CommonCrypto-Adapter unter `tests/mbedtls/` gehören ausschließlich zu den macOS-Hosttests.
 

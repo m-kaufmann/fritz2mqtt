@@ -6,4 +6,6 @@
 - Konfigurierbarer NVS-Namensraum für den Erhalt bestehender Installationen.
 - Bisheriger AHA-, MQTT-, WLAN- und HTTP-Body-Code mit Hosttests übernommen.
 - Quellbuildprofil für ESP32-WROOM-32, zwei Status-LEDs und Gehäusedokumentation.
-- Noch kein stabiler Firmwaredownload oder selbstständiger OTA-Updatekanal.
+- System/Firmware-Tab: explizite Updateprüfung, Bestätigung und Fortschritt mit Neustartkontrolle.
+- HTTPS-Quelle und Hardwareprofil fest gebunden; alte Versionen, veraltete Metadaten und ungültige Prüfsummen gesperrt.
+- Noch kein stabiler Firmwaredownload; Hosting und echte OTA-Abnahme stehen aus.
