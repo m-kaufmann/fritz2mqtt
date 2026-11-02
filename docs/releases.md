@@ -1,7 +1,7 @@
 # Entwicklungs- und Releaseweg
 
 1. **Dieses Änderungspaket:** eigenständiger Kern, neutrale Erstinstallation, Tests und CI-Build. Vorhandene Systeme bleiben auf ihrer bisherigen Firmware.
-2. **Nächstes Paket:** HTTP(S)-Updateprüfung, explizite Installationsfreigabe und Fortschritt in der Gateway-Webseite. ESPHome `http_request`/`update` nutzen; Manifest über GitHub Pages, keine beliebig eingebbare Firmware-URL.
+2. **Implementiert, noch in Abnahme:** HTTPS-Updateprüfung, explizite Installationsfreigabe, Fortschritt und Neustartkontrolle in der Gateway-Webseite über ESPHome `http_request`/`update`. Festes Manifest über GitHub Pages; Hosting und echte Pull-OTA-Abnahme stehen aus.
 3. **Erste Vorabversion:** passender Quellstand, vollständige Lizenztexte der eingebundenen Bibliotheken, Erstinstallations- und OTA-Datei, Manifest, Prüfsummen und Versionshinweise. Die CI prüft derzeit ausschließlich den Build und veröffentlicht keine Binärdateien.
 4. **Stabile Version:** erst nach vollständigem Hardwaretest einschließlich Konfigurationserhalt, unterbrochenem Download, Wiederherstellung, erneuter FRITZ!Box-/MQTT-Verbindung und verworfenem Alt-/Doppelbefehl nach Neustart.
 
