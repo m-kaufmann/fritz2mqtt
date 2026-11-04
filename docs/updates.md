@@ -56,3 +56,5 @@ Das Paket enthält Factory-/OTA-Datei, Manifest, SHA256SUMS, Buildmetadaten, auf
 Wiederanlaufbefund: MQTT war nach dem Neustart wieder verbunden, ohne empfangene Stellbefehle. Die FRITZ!Box-Anmeldung gelang nach einem zunächst fehlgeschlagenen HTTP-Verbindungsversuch; die anschließende Geräteabfrage meldete jedoch weiterhin einen HTTP-Fehler. Damit sind Download, Installation, Versionsbestätigung und Konfigurationserhalt nachgewiesen, ein durchgehend erfolgreicher FRITZ!Box-Wiederanlauf nach diesem Test noch nicht. Diese bereits im Netzwerktest beobachtete Fehlerklasse bleibt separat zu untersuchen; keine stabile Freigabe daraus ableiten.
 
 Weiterführende [HTTP-Analyse und Korrektur des WLAN-Startablaufs](http-diagnostics.md): Der nach dem OTA beobachtete frühe HTTP-0-Fehler ist reproduziert und im Entwicklungsbuild behoben; reale Header-Timeouts und normale Socket-Endemeldungen werden getrennt erfasst.
+
+Weitere [Netzwerkdiagnose mit nativen Ereigniszählern und Resetgrund](network-diagnostics.md) trennt beobachtete Erreichbarkeitsverluste von tatsächlichen Neustarts.

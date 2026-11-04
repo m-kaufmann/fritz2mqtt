@@ -1,5 +1,13 @@
 # Änderungen
 
+## 0.1.4-dev – erweiterte Netzwerkdiagnose
+
+- Native WLAN-/IP-/AP-Ereigniszähler, Resetgrund und Hauptloop-Pausen in der Status-API.
+- HTTP-Fehler um unmittelbares errno, Transportdetails und AP-Kontext ergänzt.
+- Ereignis-Callbacks verwenden ausschließlich atomare Zähler.
+- Intel-macOS-Runner für die CommonCrypto-Hosttests statt des kapazitätsbeschränkten ARM-Pools.
+- Diagnoseentwicklung; Ursache wiederholter Nichterreichbarkeit weiterhin in Untersuchung. Kein neues Firmware-Release.
+
 ## 0.1.1-dev – HTTP-Diagnose am Testgerät
 
 - AHA-Abfragen erst bei bestehender WLAN-/IP-Verbindung; unmittelbarer Anstoß nach Verbindung statt unnötiger Start-Fehlerwartezeit.

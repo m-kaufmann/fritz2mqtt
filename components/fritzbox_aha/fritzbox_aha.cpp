@@ -3,11 +3,13 @@
 #include <cmath>
 #include <cstdio>
 #include <strings.h>
+#include <cerrno>
 #include "esp_http_client.h"
 #include "esp_log.h"
 #include "esp_timer.h"
 #include "esp_system.h"
 #include "esp_wifi.h"
+#include "esp_netif.h"
 #include "esphome/core/log.h"
 
 namespace esphome::fritzbox_aha {
@@ -44,6 +46,7 @@ void FritzboxAha::update() {
 }
 
 void FritzboxAha::loop() {
+  network_tick_();
   wifi_loop_();
   mqtt_loop_();
   CommandResult result;
@@ -73,6 +76,38 @@ void FritzboxAha::loop() {
   observation_at_ = worker_millis();
   last_ = next;
   have_last_ = true;
+}
+
+void FritzboxAha::network_tick_() {
+  const uint32_t now = worker_millis();
+  const uint32_t previous = last_loop_ms_.exchange(now);
+  if (previous && now - previous > max_loop_gap_ms_.load()) max_loop_gap_ms_ = now - previous;
+  // Registration is deferred until loop(): WiFi creates the default event loop
+  // after this component's setup. Never block an event callback on web_mutex_.
+  if (network_registration_attempt_ms_ && now - network_registration_attempt_ms_ < 1000) return;
+  network_registration_attempt_ms_ = now;
+  if (!wifi_events_registered_ &&
+      esp_event_handler_register(WIFI_EVENT, ESP_EVENT_ANY_ID, network_event_, this) == ESP_OK)
+    wifi_events_registered_ = true;
+  if (!ip_events_registered_ &&
+      esp_event_handler_register(IP_EVENT, ESP_EVENT_ANY_ID, network_event_, this) == ESP_OK)
+    ip_events_registered_ = true;
+}
+
+void FritzboxAha::network_event_(void *arg, esp_event_base_t base, int32_t id, void *data) {
+  auto *self = static_cast<FritzboxAha *>(arg);
+  if (base == WIFI_EVENT) {
+    if (id == WIFI_EVENT_STA_CONNECTED) ++self->wifi_connects_;
+    else if (id == WIFI_EVENT_STA_DISCONNECTED) {
+      self->last_disconnect_reason_ = data ? static_cast<wifi_event_sta_disconnected_t *>(data)->reason : 0;
+      self->last_disconnect_ms_ = worker_millis();
+      ++self->wifi_disconnects_;
+    } else if (id == WIFI_EVENT_AP_START) ++self->ap_starts_;
+    else if (id == WIFI_EVENT_AP_STOP) ++self->ap_stops_;
+  } else if (base == IP_EVENT) {
+    if (id == IP_EVENT_STA_GOT_IP) ++self->ip_acquired_;
+    else if (id == IP_EVENT_STA_LOST_IP) ++self->ip_lost_;
+  }
 }
 
 void FritzboxAha::dump_config() {
@@ -223,14 +258,18 @@ FritzboxAha::HttpResult FritzboxAha::http_(const std::string &path, const std::s
     return true;
   };
   result.stage = "connect";
+  errno = 0;
   result.error = esp_http_client_open(client, post.size());
+  int task_errno = errno;
   bool ok = result.error == ESP_OK;
   if (ok && is_post) {
     result.stage = "write";
     size_t sent = 0;
     while (sent < post.size()) {
       if (!remaining_timeout()) { ok = false; break; }
+      errno = 0;
       int n = esp_http_client_write(client, post.data() + sent, post.size() - sent);
+      task_errno = errno;
       if (n <= 0) { result.error = n < 0 ? n : ESP_FAIL; ok = false; break; }
       sent += n;
     }
@@ -240,7 +279,9 @@ FritzboxAha::HttpResult FritzboxAha::http_(const std::string &path, const std::s
   if (ok && !remaining_timeout()) ok = false;
   if (ok) {
     result.stage = "headers";
+    errno = 0;
     length = esp_http_client_fetch_headers(client);
+    task_errno = errno;
     result.status = esp_http_client_get_status_code(client);
     ok = length >= 0 && length <= 65536;
     if (!ok) result.error = static_cast<int>(length);
@@ -256,7 +297,9 @@ FritzboxAha::HttpResult FritzboxAha::http_(const std::string &path, const std::s
       break;
     }
     if (!remaining_timeout()) { ok = false; break; }
+    errno = 0;
     int n = esp_http_client_read(client, buffer, sizeof(buffer));
+    task_errno = errno;
     last_read = n;
     if (n <= 0) {
       if (framing.chunked) result.complete = n >= 0 && esp_http_client_is_complete_data_received(client);
@@ -290,7 +333,18 @@ FritzboxAha::HttpResult FritzboxAha::http_(const std::string &path, const std::s
   observation.socket_error = socket_error; observation.last_read = last_read;
   observation.rssi = wifi_connected ? ap.rssi : 0;
   observation.complete = result.complete; observation.wifi_connected = wifi_connected;
+  observation.task_errno = task_errno;
+  if (wifi_connected) {
+    observation.channel = ap.primary;
+    std::snprintf(observation.ap_bssid, sizeof(observation.ap_bssid), "%02x:%02x:%02x:%02x:%02x:%02x",
+                  unsigned(ap.bssid[0]), unsigned(ap.bssid[1]), unsigned(ap.bssid[2]),
+                  unsigned(ap.bssid[3]), unsigned(ap.bssid[4]), unsigned(ap.bssid[5]));
+  }
   const bool failed = !result.complete || result.status != 200;
+  if (failed) {
+    int flags = 0;
+    observation.transport_error = esp_http_client_get_and_clear_last_tls_error(client, &observation.transport_detail, &flags);
+  }
   xSemaphoreTake(web_mutex_, portMAX_DELAY);
   ++web_http_requests_; web_http_last_ = observation;
   if (failed) { ++web_http_failures_; web_http_failure_ = observation; }

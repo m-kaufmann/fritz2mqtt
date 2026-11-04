@@ -106,6 +106,8 @@ class FritzboxAha : public PollingComponent, public AsyncWebHandler {
     const char *operation = "none", *phase = "none";
     uint32_t at_ms = 0, elapsed_ms = 0, bytes = 0, heap = 0;
     int status = 0, error = 0, socket_error = 0, last_read = 0, rssi = 0;
+    int task_errno = 0, transport_error = 0, transport_detail = 0, channel = 0;
+    char ap_bssid[18] = "";
     bool complete = false, wifi_connected = false;
   };
   HttpObservation web_http_last_, web_http_failure_;
@@ -114,6 +116,13 @@ class FritzboxAha : public PollingComponent, public AsyncWebHandler {
   std::vector<protocol::Thermostat> discovered_, web_devices_;
   std::string web_command_ain_, web_command_message_ = "Bereit", active_command_ain_, csrf_token_;
   std::atomic<bool> wifi_apply_requested_{false}, network_ready_{false};
+  std::atomic<bool> wifi_events_registered_{false}, ip_events_registered_{false};
+  std::atomic<uint32_t> last_loop_ms_{0}, max_loop_gap_ms_{0};
+  std::atomic<uint32_t> wifi_connects_{0}, wifi_disconnects_{0}, last_disconnect_ms_{0},
+      last_disconnect_reason_{0}, ip_acquired_{0}, ip_lost_{0}, ap_starts_{0}, ap_stops_{0};
+  uint32_t network_registration_attempt_ms_ = 0;
+  void network_tick_();
+  static void network_event_(void *arg, esp_event_base_t base, int32_t id, void *data);
   void apply_wifi_();
   void wifi_loop_();
   struct MqttInput {

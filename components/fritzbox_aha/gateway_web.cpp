@@ -10,6 +10,7 @@
 #include <ctime>
 #include "esp_crt_bundle.h"
 #include "esp_sntp.h"
+#include "esp_system.h"
 
 namespace esphome::fritzbox_aha {
 static uint32_t web_millis() { return static_cast<uint32_t>(esp_timer_get_time() / 1000); }
@@ -285,6 +286,16 @@ std::string FritzboxAha::status_json_() {
     r["connected"] = web_last_.connected; r["authenticated"] = web_last_.authenticated;
     r["fresh"] = fresh; r["diagnostic"] = web_last_.diagnostic; r["method"] = web_last_.method;
     r["device_count"] = web_last_.device_count; r["uptime"] = web_millis()/1000;
+    auto network = r["network"].to<JsonObject>();
+    network["reset_reason"] = static_cast<int>(esp_reset_reason());
+    network["event_listeners_ready"] = wifi_events_registered_.load() && ip_events_registered_.load();
+    network["main_loop_age_ms"] = web_millis() - last_loop_ms_.load();
+    network["max_main_loop_gap_ms"] = max_loop_gap_ms_.load();
+    network["wifi_connects"] = wifi_connects_.load(); network["wifi_disconnects"] = wifi_disconnects_.load();
+    network["last_disconnect_ms"] = last_disconnect_ms_.load();
+    network["last_disconnect_reason"] = last_disconnect_reason_.load();
+    network["ip_acquired"] = ip_acquired_.load(); network["ip_lost"] = ip_lost_.load();
+    network["ap_starts"] = ap_starts_.load(); network["ap_stops"] = ap_stops_.load();
     auto http = r["http"].to<JsonObject>();
     http["requests"] = web_http_requests_; http["failures"] = web_http_failures_;
     auto observation = [&](JsonObject row, const HttpObservation &h) {
@@ -294,6 +305,9 @@ std::string FritzboxAha::status_json_() {
       row["bytes"] = h.bytes; row["error"] = h.error; row["errno"] = h.socket_error;
       row["read"] = h.last_read; row["wifi_connected"] = h.wifi_connected;
       row["rssi"] = h.rssi; row["free_heap"] = h.heap;
+      row["task_errno"] = h.task_errno; row["transport_error"] = h.transport_error;
+      row["transport_detail"] = h.transport_detail; row["channel"] = h.channel;
+      row["ap_bssid"] = h.ap_bssid;
     };
     observation(http["last"].to<JsonObject>(), web_http_last_);
     if (web_http_failures_) observation(http["last_failure"].to<JsonObject>(), web_http_failure_);
