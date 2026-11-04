@@ -1,0 +1,109 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1800" height="1120" viewBox="0 0 1800 1120" role="img" aria-labelledby="title desc">
+  <title id="title">FRITZ2MQTT – Schaltplan für Unit 11</title>
+  <desc id="desc">Entwurf B vom 01.11.2026. L über Sicherung F1 und Schalter S1 an Netzteil PS1 L, N an PS1 N. Der bestätigte 5-Volt-Netzteilausgang VCC speist den 5V-Pin des ESP32, GND ist gemeinsam. GPIO25 über 470 Ohm an Anode der blauen LED, GPIO26 über 470 Ohm an Anode der grünen LED; beide Kathoden an GND. F1 hat einen Nennstrom von 100 mA. Sicherungscharakteristik und genaue Schalterausführung noch offen.</desc>
+  <defs>
+    <style>
+      text{font-family:Arial,Helvetica,sans-serif;fill:#18323d}
+      .title{font-size:36px;font-weight:700}.sub{font-size:21px;fill:#526b76}
+      .label{font-size:23px;font-weight:700}.body{font-size:21px}.small{font-size:18px;fill:#526b76}
+      .wire{fill:none;stroke-width:3.5;stroke-linejoin:round;stroke-linecap:round}
+      .symbol{fill:#fff;stroke:#18323d;stroke-width:3}
+      .dc{stroke:#bd3c32}.gnd{stroke:#263842}.phase{stroke:#79503e}.neutral{stroke:#236da5}
+      .signal{stroke:#735292}.node{fill:#263842}.pin{fill:#fff;stroke:#18323d;stroke-width:2.5}
+    </style>
+    <marker id="blue-arrow" markerWidth="7" markerHeight="7" refX="6" refY="3" orient="auto"><path d="M0 0 L6 3 L0 6 Z" fill="#236da5"/></marker>
+    <marker id="green-arrow" markerWidth="7" markerHeight="7" refX="6" refY="3" orient="auto"><path d="M0 0 L6 3 L0 6 Z" fill="#17613b"/></marker>
+  </defs>
+  <rect width="1800" height="1120" fill="#fff"/>
+  <text x="70" y="67" class="title">FRITZ2MQTT</text>
+  <text x="70" y="105" class="sub">Prinzip und Anschlusszuordnung · ESP32 / ESPHome · 01.11.2026</text>
+  <path d="M70 135 H1730" stroke="#d1dde2" stroke-width="2"/>
+
+  <!-- Netzanschluss, Sicherung und einpoliger Schalter -->
+  <text x="70" y="209" class="label">X1 · 230 V AC</text>
+  <circle cx="100" cy="300" r="8" class="pin"/>
+  <circle cx="100" cy="390" r="8" class="pin"/>
+  <text x="70" y="283" class="label">L</text><text x="70" y="373" class="label">N</text>
+  <path d="M108 300 H235 M305 300 H395 M455 300 H600" class="wire phase"/>
+  <path d="M108 390 H600" class="wire neutral"/>
+  <rect x="235" y="287" width="70" height="26" class="symbol"/>
+  <path d="M235 300 H305" class="wire phase"/>
+  <text x="270" y="247" class="label" text-anchor="middle">F1</text>
+  <text x="270" y="347" class="small" text-anchor="middle">Sicherung 100 mA</text>
+  <circle cx="395" cy="300" r="5" class="pin"/><circle cx="455" cy="300" r="5" class="pin"/>
+  <path d="M395 300 L447 266" class="wire phase"/>
+  <text x="425" y="247" class="label" text-anchor="middle">S1</text>
+  <text x="425" y="347" class="small" text-anchor="middle">Ein / Aus</text>
+
+  <!-- Netzteil: Klemmenbezeichnungen aus dem Originalfoto -->
+  <text x="745" y="209" class="label" text-anchor="middle">PS1 · AC/DC-Netzteil</text>
+  <rect x="600" y="245" width="290" height="200" rx="5" class="symbol"/>
+  <circle cx="600" cy="300" r="5" class="pin"/><circle cx="600" cy="390" r="5" class="pin"/>
+  <text x="620" y="307" class="label">L</text><text x="620" y="397" class="label">N</text>
+  <text x="745" y="350" class="body" text-anchor="middle">SKU:011012</text>
+  <text x="872" y="288" class="body" text-anchor="end">VCC (+)</text>
+  <text x="872" y="419" class="body" text-anchor="end">GND (−)</text>
+  <circle cx="890" cy="300" r="5" class="pin"/><circle cx="890" cy="390" r="5" class="pin"/>
+  <text x="745" y="484" class="small" text-anchor="middle">Ausgang: 5 V DC bestätigt</text>
+  <path d="M895 300 H1030" class="wire dc"/>
+  <text x="960" y="278" class="label" text-anchor="middle" style="fill:#bd3c32">+5 V</text>
+  <path d="M895 390 H1030 M970 390 V890 H1730 V550" class="wire gnd"/>
+  <circle cx="970" cy="390" r="5.5" class="node"/>
+
+  <!-- ESP-Board: logische Anschlüsse, keine physische Pinanordnung -->
+  <text x="1180" y="209" class="label" text-anchor="middle">U1 · ESP32-WROOM-32</text>
+  <rect x="1030" y="245" width="300" height="555" rx="8" fill="#f4f8fa" stroke="#18323d" stroke-width="3"/>
+  <text x="1180" y="268" class="small" text-anchor="middle" style="font-size:16px">AZ-Delivery · Dev Kit C</text>
+  <circle cx="1030" cy="300" r="5" class="pin"/><circle cx="1030" cy="390" r="5" class="pin"/>
+  <text x="1052" y="309" class="label">5V</text>
+  <text x="1052" y="399" class="label">GND</text>
+  <text x="1180" y="466" class="body" text-anchor="middle">FRITZ!Box ↔ MQTT</text>
+  <text x="1308" y="558" class="label" text-anchor="end">GPIO25 / IO25</text>
+  <text x="1308" y="728" class="label" text-anchor="end">GPIO26 / IO26</text>
+  <circle cx="1330" cy="550" r="5" class="pin"/><circle cx="1330" cy="720" r="5" class="pin"/>
+  <text x="1180" y="772" class="small" text-anchor="middle" style="font-size:17px">USB im Plan unbeschaltet</text>
+  <text x="1180" y="834" class="small" text-anchor="middle" style="font-size:16px">Logische Anschlüsse · keine Pin-Lagezeichnung</text>
+
+  <!-- R1 und blaue LED: Anode links, Kathode rechts -->
+  <path d="M1335 550 H1410 M1495 550 H1585 M1622 550 H1730" class="wire signal"/>
+  <rect x="1410" y="537" width="85" height="26" class="symbol"/>
+  <text x="1452" y="501" class="label" text-anchor="middle">R1</text>
+  <text x="1452" y="606" class="body" text-anchor="middle">470 Ω · ¼ W</text>
+  <path d="M1585 531 L1622 550 L1585 569 Z" fill="#d8e9fa" stroke="#18323d" stroke-width="3"/>
+  <path d="M1622 529 V571" class="wire gnd"/>
+  <path d="M1603 520 L1626 497 M1620 526 L1643 503" fill="none" stroke="#236da5" stroke-width="2.5" marker-end="url(#blue-arrow)"/>
+  <text x="1608" y="475" class="label" text-anchor="middle" style="fill:#236da5">D1 · Blau</text>
+  <text x="1567" y="584" class="small">A</text><text x="1632" y="584" class="small">K</text>
+  <text x="1608" y="605" class="body" text-anchor="middle">WLAN</text>
+
+  <!-- R2 und grüne LED -->
+  <path d="M1335 720 H1410 M1495 720 H1585 M1622 720 H1730" class="wire signal"/>
+  <rect x="1410" y="707" width="85" height="26" class="symbol"/>
+  <text x="1452" y="671" class="label" text-anchor="middle">R2</text>
+  <text x="1452" y="776" class="body" text-anchor="middle">470 Ω · ¼ W</text>
+  <path d="M1585 701 L1622 720 L1585 739 Z" fill="#dcefe4" stroke="#18323d" stroke-width="3"/>
+  <path d="M1622 699 V741" class="wire gnd"/>
+  <path d="M1603 690 L1626 667 M1620 696 L1643 673" fill="none" stroke="#17613b" stroke-width="2.5" marker-end="url(#green-arrow)"/>
+  <text x="1608" y="645" class="label" text-anchor="middle" style="fill:#17613b">D2 · Grün</text>
+  <text x="1567" y="754" class="small">A</text><text x="1632" y="754" class="small">K</text>
+  <text x="1608" y="793" class="body" text-anchor="middle">FRITZ!Box + MQTT</text>
+  <circle cx="1730" cy="720" r="5.5" class="node"/>
+  <path d="M1130 890 V925 M1110 925 H1150 L1130 945 Z" fill="none" stroke="#263842" stroke-width="3"/>
+  <circle cx="1130" cy="890" r="5.5" class="node"/>
+  <text x="1130" y="980" class="label" text-anchor="middle">GND / 0 V gemeinsam</text>
+
+  <!-- Aufbauangaben; keine Abnahmebehauptung -->
+  <rect x="70" y="550" width="820" height="285" rx="7" fill="#f4f8fa" stroke="#d1dde2" stroke-width="1.5"/>
+  <text x="95" y="592" class="label">Bauteile und Anschlusszuordnung</text>
+  <text x="95" y="634" class="body">F1: vorhandener Sicherungshalter · Sicherung 100 mA</text>
+  <text x="95" y="674" class="body">S1: vorhandener Ein/Aus-Schalter · einpolig gezeichnet</text>
+  <text x="95" y="714" class="body">R1 / R2: je 470 Ω · direkt zwischen GPIO und LED-Anode</text>
+  <text x="95" y="754" class="body">A = Anode (+) · K = Kathode (−), Seite des Querstrichs</text>
+  <text x="95" y="794" class="body">GPIO HIGH → LED an · keine zusätzliche LED-Versorgung</text>
+  <text x="70" y="918" class="body">Gehäuse: Fritz2mqtt · Sicherung, Schalter und zwei Front-LEDs</text>
+  <text x="70" y="955" class="small">Eigenes Gehäuse aus dem 3D-Drucker · Netzteilausgang 5 V DC · Sicherung 100 mA</text>
+  <path d="M70 1015 H1730" stroke="#d1dde2" stroke-width="2"/>
+  <text x="70" y="1055" class="body">Netzteil und ESP32 teilen GND. Jede LED hat einen eigenen Vorwiderstand.</text>
+  <text x="70" y="1090" class="small">Anschlüsse logisch dargestellt; keine maßstäbliche Pinanordnung des Boards.</text>
+</svg>
