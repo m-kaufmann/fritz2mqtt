@@ -58,3 +58,16 @@ Wiederanlaufbefund: MQTT war nach dem Neustart wieder verbunden, ohne empfangene
 Weiterführende [HTTP-Analyse und Korrektur des WLAN-Startablaufs](http-diagnostics.md): Der nach dem OTA beobachtete frühe HTTP-0-Fehler ist reproduziert und im Entwicklungsbuild behoben; reale Header-Timeouts und normale Socket-Endemeldungen werden getrennt erfasst.
 
 Weitere [Netzwerkdiagnose mit nativen Ereigniszählern und Resetgrund](network-diagnostics.md) trennt beobachtete Erreichbarkeitsverluste von tatsächlichen Neustarts.
+
+## Stable 0.1.2 und Wechsel vom Testkanal
+
+Firmware 0.1.2 aus `firmware/esp32.yaml` fragt den Stable-Kanal ab. Das
+bisherige Testmanifest bietet einmalig dieselbe Binärdatei an. Bestehende
+Geräte mit 0.1.1 können sie über **System → Firmware** installieren.
+Nach dem Neustart muss die Firmware-Diagnose 0.1.2 und den Kanal
+`stable` melden. Die Gerätekonfiguration bleibt im bestehenden
+NVS-Namensraum. Das Testmanifest wird nach bestätigter Migration der
+beiden Bestandsgeräte entfernt.
+
+Das Release enthält die zu den Binärdateien gehörenden Quellen,
+Builddaten, Lizenztexte und SHA-256-Prüfsummen.
