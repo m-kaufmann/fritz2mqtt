@@ -1,0 +1,31 @@
+name: Fehler melden
+description: Reproduzierbaren Gateway-Fehler beschreiben
+title: "[Fehler] "
+body:
+  - type: markdown
+    attributes:
+      value: Bitte keine Passwörter, API-Schlüssel, vollständigen Geräteexporte oder persönlichen Standortdaten posten.
+  - type: input
+    id: version
+    attributes:
+      label: Firmwareversion / Commit
+    validations:
+      required: true
+  - type: input
+    id: hardware
+    attributes:
+      label: ESP-Board und Flashgröße
+  - type: input
+    id: fritz
+    attributes:
+      label: FRITZ!Box-Modell und FRITZ!OS-Version
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Schritte, erwartetes Ergebnis und tatsächliches Ergebnis
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Bereinigte Diagnose oder Logauszug

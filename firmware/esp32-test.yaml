@@ -1,0 +1,8 @@
+# Only for separate test devices. This profile never consumes the stable channel.
+packages:
+  factory: !include esp32.yaml
+update:
+  - id: !extend gateway_firmware_update
+    source: https://m-kaufmann.github.io/fritz2mqtt/firmware/esp32-4mb-v1/testing/manifest.json
+fritzbox_aha:
+  firmware_channel: testing

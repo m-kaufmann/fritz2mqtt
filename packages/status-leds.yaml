@@ -1,0 +1,29 @@
+# Requires the updated fritzbox_aha component, id: fritz_gateway.
+# GPIO -> own 470 ohm resistor -> LED anode; LED cathode -> GND.
+output:
+  - platform: gpio
+    id: gateway_wifi_led
+    pin: GPIO25
+  - platform: gpio
+    id: gateway_ready_led
+    pin: GPIO26
+
+# No delays in the main loop, no additional MQTT client or control entities.
+interval:
+  - interval: 100ms
+    then:
+      - if:
+          condition:
+            wifi.connected:
+          then:
+            - output.turn_on: gateway_wifi_led
+            - lambda: |-
+                const bool ready = id(fritz_gateway).status_led_ready();
+                const bool blink = (millis() % 1000U) < 500U;
+                if (ready || blink) id(gateway_ready_led).turn_on();
+                else id(gateway_ready_led).turn_off();
+          else:
+            - output.turn_off: gateway_ready_led
+            - lambda: |-
+                if ((millis() % 1000U) < 500U) id(gateway_wifi_led).turn_on();
+                else id(gateway_wifi_led).turn_off();
