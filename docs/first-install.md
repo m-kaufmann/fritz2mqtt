@@ -24,7 +24,7 @@ esphome compile firmware/esp32.yaml
 esphome upload firmware/esp32.yaml --device <DEIN_USB_PORT>
 ```
 
-Für ein separates OTA-Testgerät stattdessen **`firmware/esp32-test.yaml`** verwenden. Dieses Profil fragt ausschließlich den Testkanal ab. Der normale Build verwendet den stabilen Kanal.
+Der normale Build verwendet den stabilen Kanal. Für gezielte Tests auf einem separaten Gateway können Vorabversionen per ESPHome-Wartungs-OTA installiert werden. Der historische Testkanal bietet derzeit keine Firmware an.
 
 Wenn ein passendes fertiges Paket unter [GitHub Releases](https://github.com/m-kaufmann/fritz2mqtt/releases) angeboten wird: Für die erste USB-Installation ist **`firmware.factory.bin`** bestimmt, nicht `firmware.ota.bin`.
 

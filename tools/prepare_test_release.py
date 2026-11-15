@@ -20,6 +20,7 @@ def main():
     import esphome
     parser=argparse.ArgumentParser();parser.add_argument('--version',required=True);parser.add_argument('--build',type=Path,required=True);parser.add_argument('--output',type=Path,required=True);parser.add_argument('--channel', choices=('testing', 'stable'), default='testing');
     parser.add_argument('--prerelease', action='store_true', help='Package a -dev build for manual OTA without an update manifest')
+    parser.add_argument('--summary', help='Short description for the OTA manifest')
     args=parser.parse_args()
     if args.prerelease and args.channel != 'stable':
         parser.error('Manual prereleases use the stable firmware profile')
@@ -87,7 +88,7 @@ Do not put personal settings into the build; configure them on the device.
     with tarfile.open(out/'licenses.tar.gz','w:gz') as tar:tar.add(licenses,arcname='LICENSES')
     if not args.prerelease:
         md5=hashlib.md5((out/'firmware.ota.bin').read_bytes()).hexdigest()
-        manifest={'name':'FRITZ2MQTT · Stable' if args.channel == 'stable' else 'FRITZ2MQTT · OTA-Testkanal','version':args.version,'builds':[{'chipFamily':'ESP32','ota':{'md5':md5,'path':f'https://m-kaufmann.github.io/fritz2mqtt/firmware/esp32-4mb-v1/{args.version}/firmware.ota.bin','release_url':f'https://github.com/m-kaufmann/fritz2mqtt/releases/tag/{tag}','summary':'Stabile Firmware und Wechsel zum Stable-Kanal' if args.channel == 'stable' else 'OTA-Testversion; keine allgemeine stabile Freigabe'}}]}
+        manifest={'name':'FRITZ2MQTT · Stable' if args.channel == 'stable' else 'FRITZ2MQTT · OTA-Testkanal','version':args.version,'builds':[{'chipFamily':'ESP32','ota':{'md5':md5,'path':f'https://m-kaufmann.github.io/fritz2mqtt/firmware/esp32-4mb-v1/{args.version}/firmware.ota.bin','release_url':f'https://github.com/m-kaufmann/fritz2mqtt/releases/tag/{tag}','summary':args.summary or ('Stabile Firmware' if args.channel == 'stable' else 'OTA-Testversion; keine allgemeine stabile Freigabe')}}]}
         (out/'manifest.json').write_text(json.dumps(manifest,indent=2,ensure_ascii=False)+'\n')
     files=[p for p in out.iterdir() if p.is_file()];(out/'SHA256SUMS.txt').write_text(''.join(f'{sha(p)}  {p.name}\n' for p in sorted(files)))
     print(json.dumps({'output':str(out),'source_commit':commit,'source_archive_mb':round((out/'corresponding-sources.tar.gz').stat().st_size/1048576,1),'license_files':sum(p.is_file() for p in licenses.rglob('*'))}))
