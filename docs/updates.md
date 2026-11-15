@@ -85,3 +85,12 @@ Updates suchen**. Die Installation startet erst nach Bestätigung der
 angezeigten Version. Anschließend zeigt das Gateway **0.1.14** an. WLAN-Profile,
 FRITZ!Box, MQTT und Thermostat-Zuordnungen bleiben im vorhandenen NVS-Schema
 gespeichert. Für ein Gerät ohne Firmware ist die Factory-Datei vorgesehen.
+
+
+## Stable 0.1.16
+
+Der [stabile Download 0.1.16](https://github.com/m-kaufmann/fritz2mqtt/releases/tag/v0.1.16)
+enthält die Firmware für `esp32-4mb-v1` sowie Quellen, Lizenzen und Prüfsummen.
+Bestehende Gateways finden die Version unter **System / Firmware → Nach Updates
+suchen**. Änderungen an Topic-Einrichtung und Bedienung stehen im
+[Änderungsprotokoll](../CHANGELOG.md#0116--stable-15112026).

@@ -1,5 +1,11 @@
 # Änderungen
 
+## 0.1.16 – Stable (15.11.2026)
+
+- „Topics vorbelegen“ ist im aufgeklappten Bereich „Datenpunkte und Topics“ sichtbar. Bereits geöffnete Bereiche bleiben beim Hinzufügen und Entfernen anderer Geräte offen.
+- Während eines Stellauftrags ändert nur der zugehörige „Übernehmen“-Button seine Farbe. Weitere Stellaufträge sind bis zum Abschluss gesperrt.
+- Der gespeicherte MQTT-Topic-Präfix steht beim späteren Konfigurieren weiterer Thermostate wieder zur Verfügung. Die vorgeschlagenen Topics lassen sich pro Thermostat bearbeiten.
+
 ## 0.1.14 – Stable (15.11.2026)
 
 - WLAN-Einrichtung und Standortwechsel nutzen dieselbe Gateway-Oberfläche. Beide WLAN-Profile werden vor dem Neustart dauerhaft gespeichert.
