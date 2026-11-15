@@ -1,5 +1,6 @@
 #include "fritzbox_aha.h"
 #include "gateway_page.h"
+#include "gateway_icon.h"
 #include "esphome/components/captive_portal/captive_portal.h"
 #include "esphome/components/json/json_util.h"
 #include "esphome/components/wifi/scan_list.h"
@@ -405,6 +406,8 @@ std::string FritzboxAha::status_json_() {
     r["mqtt_last_input"] = mqtt_last_input_;
     auto *wifi = wifi::global_wifi_component;
     r["wifi_connected"] = wifi->is_connected();
+    r["wifi_configured"] = runtime_config_->wifi_configured;
+    r["ap_active"] = wifi->is_ap_active();
     r["wifi_ssid"] = wifi->is_connected() ? std::string(wifi->get_sta().get_ssid().c_str()) : std::string();
     r["ap_ssid"] = std::string(wifi->get_ap().get_ssid().c_str());
     r["ap_address"] = "192.168.4.1";
@@ -452,7 +455,7 @@ bool FritzboxAha::canHandle(AsyncWebServerRequest *request) const {
       captive_portal::global_captive_portal->is_active()) return url != "/config.json";
 #endif
   if (url == "/") return !request->hasParam("esphome");
-  return url == "/gateway/" || url == "/gateway" || url == "/gateway/api/status" ||
+  return url == "/apple-touch-icon.png" || url == "/gateway/" || url == "/gateway" || url == "/gateway/api/status" ||
          url == "/gateway/api/firmware" || url == "/gateway/api/firmware/check" || url == "/gateway/api/firmware/install" ||
          url == "/gateway/api/wifi/scan" || url == "/gateway/api/mqtt-test" || url == "/gateway/api/config" || url == "/gateway/api/target" || url == "/gateway/api/poll";
 }
@@ -486,6 +489,11 @@ void FritzboxAha::handleRequest(AsyncWebServerRequest *request) {
     std::string body = json::build_json([&](JsonObject r) { r["error"] = message; }); serve_json_(request, code, body);
   };
   if (request->method() == HTTP_GET) {
+    if (url == "/apple-touch-icon.png") {
+      auto *response = request->beginResponse(200, "image/png", GATEWAY_TOUCH_ICON, sizeof(GATEWAY_TOUCH_ICON));
+      request->send(response);
+      return;
+    }
     if (url == "/gateway/api/firmware") { serve_json_(request, 200, firmware_json_()); return; }
     if (url == "/gateway/api/status") { serve_json_(request, 200, status_json_()); return; }
     if (url == "/gateway/api/wifi/scan") { serve_json_(request, 200, wifi_scan_json_()); return; }

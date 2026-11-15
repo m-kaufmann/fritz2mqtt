@@ -53,5 +53,15 @@ class PublicPackage(unittest.TestCase):
         self.assertIn("prefix+d.base+'/set'", page)
         self.assertIn('FRITZ2MQTT Gateway', page)
 
+    def test_embedded_touch_icon(self):
+        icon = (COMPONENT / 'apple-touch-icon.png').read_bytes()
+        self.assertEqual(icon[:8], b'\x89PNG\r\n\x1a\n')
+        self.assertEqual(int.from_bytes(icon[16:20], 'big'), 180)
+        self.assertEqual(int.from_bytes(icon[20:24], 'big'), 180)
+        encoded = (COMPONENT / 'gateway_icon.h').read_text()
+        self.assertEqual(bytes(int(value, 16) for value in re.findall(r'0x([a-f0-9]{2})', encoded)), icon)
+        self.assertIn('rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png"',
+                      (COMPONENT / 'gateway.html').read_text())
+
 if __name__ == '__main__':
     unittest.main()
