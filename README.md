@@ -45,7 +45,7 @@ fritz2mqtt/site/1/thermostat_battery     # Batterie, %
 fritz2mqtt/site/1/thermostat/set         # Neuer Sollwert
 ```
 
-Der MQTT-Host ist ein Hostname ohne `http://`. Rückmeldungen: QoS 1, retained. Befehle: QoS-0-Abonnement, kein Ausführen retained/duplizierter/ungültiger Nachrichten. Ein angenommener Auftrag wird einmalig geschrieben und zurückgelesen. Die Zeitschaltung der FRITZ!Box bleibt wirksam. Eine Sollwertbestätigung ist keine Messung der Ventilbewegung.
+Der MQTT-Host ist ein Hostname ohne `http://`. Rückmeldungen: QoS 1, retained. Befehle: QoS-0-Abonnement, kein Ausführen retained/duplizierter/ungültiger Nachrichten. Ein angenommener Auftrag wird einmalig geschrieben und zurückgelesen. Die Zeitschaltung der FRITZ!Box bleibt wirksam. Das Gateway bestätigt den von der FRITZ!Box zurückgelesenen Sollwert.
 
 ## Entwicklung und Updates
 

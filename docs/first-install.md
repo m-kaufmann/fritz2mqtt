@@ -62,7 +62,7 @@ Leere Passwortfelder behalten bei unveränderter Verbindung das gespeicherte Pas
 
 ## 5. Diagnose und Firmwareupdates
 
-Unter **Diagnose** FRITZ!Box-Anmeldung, aktuelle Messwerte und MQTT-Verbindung prüfen. „Verbunden“ beim Broker bestätigt noch keine Topiczuordnung. Eine Sollwertbestätigung der FRITZ!Box bestätigt keine physische Ventilbewegung.
+Unter **Diagnose** FRITZ!Box-Anmeldung, aktuelle Messwerte und MQTT-Verbindung prüfen. „Verbunden“ beim Broker bestätigt noch keine Topiczuordnung. Das Gateway bestätigt den von der FRITZ!Box zurückgelesenen Sollwert.
 
 Unter **System / Firmware** werden installierte und angebotene Version sowie der Kanal angezeigt. **Nach Updates suchen** installiert nichts. Erst die Bestätigung der angebotenen Version und **Update installieren** starten den Download und anschließend einen Neustart. Währenddessen nicht mehrfach absenden. Nach dem Neustart muss dieselbe Gerätekennung die Zielversion melden. Details: [Firmwareupdates](updates.md).
 
