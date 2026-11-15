@@ -18,7 +18,11 @@ def allowed(member):
 
 def main():
     import esphome
-    parser=argparse.ArgumentParser();parser.add_argument('--version',required=True);parser.add_argument('--build',type=Path,required=True);parser.add_argument('--output',type=Path,required=True);parser.add_argument('--channel', choices=('testing', 'stable'), default='testing');args=parser.parse_args()
+    parser=argparse.ArgumentParser();parser.add_argument('--version',required=True);parser.add_argument('--build',type=Path,required=True);parser.add_argument('--output',type=Path,required=True);parser.add_argument('--channel', choices=('testing', 'stable'), default='testing');
+    parser.add_argument('--prerelease', action='store_true', help='Package a -dev build for manual OTA without an update manifest')
+    args=parser.parse_args()
+    if args.prerelease and args.channel != 'stable':
+        parser.error('Manual prereleases use the stable firmware profile')
     if not re.fullmatch(r'(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)',args.version):parser.error('Numeric version required')
     if subprocess.check_output(['git','status','--porcelain'],cwd=ROOT,text=True):parser.error('Commit the exact public source before packaging')
     out=args.output.resolve()
@@ -31,7 +35,8 @@ def main():
     profile = 'firmware/esp32.yaml' if args.channel == 'stable' else 'firmware/esp32-test.yaml'
     tag = f'v{args.version}' if args.channel == 'stable' else f'v{args.version}-test.1'
     manifest_path = f'/esp32-4mb-v1/{args.channel}/manifest.json'
-    if f'"{args.version}"' not in defines or f'firmware_channel("{args.channel}")' not in maincpp or manifest_path not in maincpp:
+    version = args.version + '-dev' if args.prerelease else args.version
+    if f'"{version}"' not in defines or f'firmware_channel("{args.channel}")' not in maincpp or manifest_path not in maincpp:
         parser.error('Build must match version, channel and update URL')
     for forbidden in ['home-oxolon.de','DE_RO_AK3','192.168.21.5','mqtt2fritz']:
         if forbidden in maincpp:parser.error('Private defaults in generated firmware')
@@ -47,7 +52,7 @@ def main():
     for p in [ROOT/'LICENSE',Path(esphome.__file__).parent.parent/'esphome-2026.10.1.dist-info/licenses/LICENSE',idf/'docs/en/COPYRIGHT.rst']:
         if not p.exists():raise ValueError('Missing required license source: '+p.name)
         (licenses/('ESPHome-LICENSE' if 'dist-info' in str(p) else 'ESP-IDF-COPYRIGHT.rst' if p.suffix=='.rst' else 'FRITZ2MQTT-LICENSE')).write_bytes(p.read_bytes())
-    metadata={'version':args.version,'channel':args.channel,'hardware_profile':'esp32-4mb-v1','source_commit':commit,'esphome_version':'2026.10.1','idf_version':'5.5.6','components':description['build_components'],'build_command':f'esphome -s firmware_version {args.version} compile {profile}','factory_sha256':sha(out/'firmware.factory.bin'),'ota_sha256':sha(out/'firmware.ota.bin')}
+    metadata={'version':version,'channel':args.channel,'hardware_profile':'esp32-4mb-v1','source_commit':commit,'esphome_version':'2026.10.1','idf_version':'5.5.6','components':description['build_components'],'build_command':f'esphome -s firmware_version {version} compile {profile}','factory_sha256':sha(out/'firmware.factory.bin'),'ota_sha256':sha(out/'firmware.ota.bin')}
     (out/'build.json').write_text(json.dumps(metadata,indent=2)+'\n');(out/'dependencies.lock').write_bytes((build/'dependencies.lock').read_bytes())
     (out/'BUILD.md').write_text('''# Corresponding build sources
 
@@ -80,9 +85,10 @@ Do not put personal settings into the build; configure them on the device.
         for member in tar:
             if member.name.startswith('/') or '..' in Path(member.name).parts:raise ValueError('Unsafe archive member')
     with tarfile.open(out/'licenses.tar.gz','w:gz') as tar:tar.add(licenses,arcname='LICENSES')
-    md5=hashlib.md5((out/'firmware.ota.bin').read_bytes()).hexdigest()
-    manifest={'name':'FRITZ2MQTT · Stable' if args.channel == 'stable' else 'FRITZ2MQTT · OTA-Testkanal','version':args.version,'builds':[{'chipFamily':'ESP32','ota':{'md5':md5,'path':f'https://m-kaufmann.github.io/fritz2mqtt/firmware/esp32-4mb-v1/{args.version}/firmware.ota.bin','release_url':f'https://github.com/m-kaufmann/fritz2mqtt/releases/tag/{tag}','summary':'Stabile Firmware und Wechsel zum Stable-Kanal' if args.channel == 'stable' else 'OTA-Testversion; keine allgemeine stabile Freigabe'}}]}
-    (out/'manifest.json').write_text(json.dumps(manifest,indent=2,ensure_ascii=False)+'\n')
+    if not args.prerelease:
+        md5=hashlib.md5((out/'firmware.ota.bin').read_bytes()).hexdigest()
+        manifest={'name':'FRITZ2MQTT · Stable' if args.channel == 'stable' else 'FRITZ2MQTT · OTA-Testkanal','version':args.version,'builds':[{'chipFamily':'ESP32','ota':{'md5':md5,'path':f'https://m-kaufmann.github.io/fritz2mqtt/firmware/esp32-4mb-v1/{args.version}/firmware.ota.bin','release_url':f'https://github.com/m-kaufmann/fritz2mqtt/releases/tag/{tag}','summary':'Stabile Firmware und Wechsel zum Stable-Kanal' if args.channel == 'stable' else 'OTA-Testversion; keine allgemeine stabile Freigabe'}}]}
+        (out/'manifest.json').write_text(json.dumps(manifest,indent=2,ensure_ascii=False)+'\n')
     files=[p for p in out.iterdir() if p.is_file()];(out/'SHA256SUMS.txt').write_text(''.join(f'{sha(p)}  {p.name}\n' for p in sorted(files)))
     print(json.dumps({'output':str(out),'source_commit':commit,'source_archive_mb':round((out/'corresponding-sources.tar.gz').stat().st_size/1048576,1),'license_files':sum(p.is_file() for p in licenses.rglob('*'))}))
 if __name__=='__main__':main()
