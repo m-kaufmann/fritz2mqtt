@@ -2,14 +2,13 @@
 #include "gateway_page.h"
 #include "esphome/components/captive_portal/captive_portal.h"
 #include "esphome/components/json/json_util.h"
-#include "esphome/components/wifi/wifi_component.h"
+#include "esphome/components/wifi/scan_list.h"
 #include "esp_random.h"
 #include "esp_timer.h"
 #include "nvs.h"
 #include <cstdio>
 #include <cstring>
 #include <ctime>
-#include <new>
 #include "esp_crt_bundle.h"
 #include "esp_sntp.h"
 #include "esp_wifi.h"
@@ -54,6 +53,7 @@ void FritzboxAha::init_web_() {
   }
   runtime_config_ = config;
   auto *wifi = wifi::global_wifi_component;
+  wifi->add_scan_results_listener(this);
   auto ap = wifi->get_ap();
   ap.set_ssid("FRITZ2MQTT-" + get_mac_address().substr(6));
   ap.set_password("");
@@ -124,63 +124,51 @@ void FritzboxAha::wifi_scan_start_() {
     return;
   }
   wifi->request_roaming_suppression();
-  // IDF's blocking scan posts no scan-done event to ESPHome. Block only this
-  // short-lived task while MQTT, FRITZ!Box and the web server continue to run.
-  if (xTaskCreate(wifi_scan_task_, "gateway_scan", 6144, this, 1, nullptr) != pdPASS) {
+  // Schedule a driver scan without changing ESPHome's STA connection state.
+  // ESPHome consumes WIFI_EVENT_SCAN_DONE and owns the driver result buffer.
+  wifi_scan_config_t scan{};
+  scan.show_hidden = true;
+  scan.scan_type = WIFI_SCAN_TYPE_ACTIVE;
+  scan.scan_time.active.min = 100;
+  scan.scan_time.active.max = 300;
+  scan.scan_time.passive = 300;
+  scan.home_chan_dwell_time = WIFI_SCAN_HOME_CHANNEL_DWELL_DEFAULT_TIME;
+  scan.coex_background_scan = true;
+  const auto result = esp_wifi_scan_start(&scan, false);
+  if (result != ESP_OK) {
+    ESP_LOGW("fritzbox_aha", "WLAN-Scan konnte nicht starten: %s", esp_err_to_name(result));
     wifi->release_roaming_suppression();
-    wifi_scan_finish_({}, "Kein Speicher fuer den WLAN-Scan frei.");
+    wifi_scan_finish_({}, "WLAN-Scan konnte nicht starten. Bitte erneut versuchen.");
+    return;
   }
+  // ESPHome skips its listener callback when the driver reports zero records.
+  set_timeout("wifi_scan", 8000, [this]() {
+    wifi::global_wifi_component->release_roaming_suppression();
+    ESP_LOGW("fritzbox_aha", "WLAN-Scan ohne Ergebnisrueckmeldung");
+    wifi_scan_finish_({}, "Der WLAN-Treiber hat keine Scanergebnisse geliefert.");
+  });
 }
 
-void FritzboxAha::wifi_scan_task_(void *arg) {
-  {
-    auto *self = static_cast<FritzboxAha *>(arg);
-    constexpr uint16_t MAX_RECORDS = 32;
-    auto records = std::unique_ptr<wifi_ap_record_t[]>(new (std::nothrow) wifi_ap_record_t[MAX_RECORDS]);
-    std::vector<WifiScanNetwork> networks;
-    const char *error = records ? nullptr : "Kein Speicher fuer die WLAN-Ergebnisse frei.";
-    wifi_scan_config_t scan{};
-    scan.show_hidden = true;
-    scan.home_chan_dwell_time = WIFI_SCAN_HOME_CHANNEL_DWELL_DEFAULT_TIME;
-    scan.coex_background_scan = true;
-    scan.scan_time.active.min = 100;
-    scan.scan_time.active.max = 300;
-    scan.scan_time.passive = 300;
+void FritzboxAha::on_wifi_scan_results(const wifi::wifi_scan_vector_t<wifi::WiFiScanResult> &results) {
+  xSemaphoreTake(web_mutex_, portMAX_DELAY);
+  const bool scanning = wifi_scan_running_;
+  xSemaphoreGive(web_mutex_);
+  if (!scanning) return;
+  cancel_timeout("wifi_scan");
 
-    // A passive pass listens for beacons when active probing yielded no named networks.
-    for (const auto mode : {WIFI_SCAN_TYPE_ACTIVE, WIFI_SCAN_TYPE_PASSIVE}) {
-      if (error || !networks.empty() || !self->network_ready_) break;
-      scan.scan_type = mode;
-      auto result = esp_wifi_scan_start(&scan, true);
-      uint16_t total = 0, count = MAX_RECORDS;
-      if (result == ESP_OK) {
-        result = esp_wifi_scan_get_ap_num(&total);
-        if (result == ESP_OK && total != 0)
-          result = esp_wifi_scan_get_ap_records(&count, records.get());
-        if (result != ESP_OK || total == 0) esp_wifi_clear_ap_list();
-      }
-      if (result != ESP_OK) {
-        ESP_LOGW("fritzbox_aha", "WLAN-Scan (%s): %s", mode == WIFI_SCAN_TYPE_ACTIVE ? "aktiv" : "passiv",
-                 esp_err_to_name(result));
-        error = "WLAN-Scan konnte nicht abgeschlossen werden. Bitte erneut versuchen.";
-        break;
-      }
-      // The driver sorts by RSSI. Consolidate repeat BSSIDs under one SSID.
-      for (uint16_t i = 0; total != 0 && i < count; ++i) {
-        const auto &ap = records[i];
-        const auto *ssid = reinterpret_cast<const char *>(ap.ssid);
-        if (*ssid && std::none_of(networks.begin(), networks.end(), [&](const auto &n) { return n.ssid == ssid; }))
-          networks.push_back({ssid, ap.rssi, ap.authmode != WIFI_AUTH_OPEN});
-      }
-      ESP_LOGD("fritzbox_aha", "WLAN-Scan (%s): %u APs, %u sichtbare Netze",
-               mode == WIFI_SCAN_TYPE_ACTIVE ? "aktiv" : "passiv", static_cast<unsigned>(total),
-               static_cast<unsigned>(networks.size()));
+  std::vector<WifiScanNetwork> networks;
+  if (wifi::global_wifi_component->is_connected()) {
+    for (const auto &result : results) {
+      bool locked = false;
+      if (wifi::should_show_scan_entry(results, result, locked))
+        networks.push_back({result.get_ssid().str(), result.get_rssi(), locked});
     }
-    if (!self->network_ready_) error = "WLAN-Verbindung unterbrochen. Bitte erneut versuchen.";
-    wifi::global_wifi_component->release_roaming_suppression();
-    self->wifi_scan_finish_(std::move(networks), error);
+    std::sort(networks.begin(), networks.end(), [](const auto &a, const auto &b) { return a.rssi > b.rssi; });
+    if (networks.size() > 32) networks.resize(32);
   }
-  vTaskDelete(nullptr);
+  ESP_LOGD("fritzbox_aha", "WLAN-Scan: %zu APs, %zu sichtbare Netze", results.size(), networks.size());
+  wifi::global_wifi_component->release_roaming_suppression();
+  wifi_scan_finish_(std::move(networks), nullptr);
 }
 
 void FritzboxAha::wifi_scan_finish_(std::vector<WifiScanNetwork> networks, const char *error) {

@@ -46,6 +46,8 @@ CONFIG_SCHEMA = cv.All(
 
 async def to_code(config):
     wifi.enable_runtime_roaming_suppression()
+    wifi.request_wifi_scan_results()
+    wifi.request_wifi_scan_results_listener()
     var = cg.new_Pvariable(config[CONF_ID])
     await cg.register_component(var, config)
     if "firmware_update" in config:

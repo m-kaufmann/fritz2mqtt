@@ -13,6 +13,7 @@
 #include "esphome/components/http_request/update/http_request_update.h"
 #endif
 #include "esphome/components/web_server_base/web_server_base.h"
+#include "esphome/components/wifi/wifi_component.h"
 #include "esphome/core/component.h"
 #include "esphome/components/binary_sensor/binary_sensor.h"
 #include "esphome/components/sensor/sensor.h"
@@ -24,7 +25,7 @@
 
 namespace esphome::fritzbox_aha {
 
-class FritzboxAha : public PollingComponent, public AsyncWebHandler {
+class FritzboxAha : public PollingComponent, public AsyncWebHandler, public wifi::WiFiScanResultsListener {
  public:
 #ifdef USE_FRITZ2MQTT_UPDATE
   void set_firmware_update(http_request::HttpRequestUpdate *v) { firmware_update_ = v; }
@@ -133,7 +134,7 @@ class FritzboxAha : public PollingComponent, public AsyncWebHandler {
   const char *wifi_scan_error_ = nullptr;
   std::vector<WifiScanNetwork> wifi_scan_networks_;
   void wifi_scan_start_();
-  static void wifi_scan_task_(void *arg);
+  void on_wifi_scan_results(const wifi::wifi_scan_vector_t<wifi::WiFiScanResult> &results) override;
   void wifi_scan_finish_(std::vector<WifiScanNetwork> networks, const char *error);
   std::string wifi_scan_json_();
   struct MqttInput {
