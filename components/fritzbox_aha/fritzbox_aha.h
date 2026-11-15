@@ -13,6 +13,7 @@
 #include "esphome/components/http_request/update/http_request_update.h"
 #endif
 #include "esphome/components/web_server_base/web_server_base.h"
+#include "esphome/components/wifi/wifi_component.h"
 #include "esphome/core/component.h"
 #include "esphome/components/binary_sensor/binary_sensor.h"
 #include "esphome/components/sensor/sensor.h"
@@ -24,7 +25,7 @@
 
 namespace esphome::fritzbox_aha {
 
-class FritzboxAha : public PollingComponent, public AsyncWebHandler {
+class FritzboxAha : public PollingComponent, public AsyncWebHandler, public wifi::WiFiScanResultsListener {
  public:
 #ifdef USE_FRITZ2MQTT_UPDATE
   void set_firmware_update(http_request::HttpRequestUpdate *v) { firmware_update_ = v; }
@@ -115,7 +116,7 @@ class FritzboxAha : public PollingComponent, public AsyncWebHandler {
   uint32_t web_observation_at_ = 0, web_revision_ = 0;
   std::vector<protocol::Thermostat> discovered_, web_devices_;
   std::string web_command_ain_, web_command_message_ = "Bereit", active_command_ain_, csrf_token_;
-  std::atomic<bool> wifi_apply_requested_{false}, network_ready_{false};
+  std::atomic<bool> wifi_restart_requested_{false}, network_ready_{false};
   std::atomic<bool> wifi_events_registered_{false}, ip_events_registered_{false};
   std::atomic<uint32_t> last_loop_ms_{0}, max_loop_gap_ms_{0};
   std::atomic<uint32_t> wifi_connects_{0}, wifi_disconnects_{0}, last_disconnect_ms_{0},
@@ -123,8 +124,19 @@ class FritzboxAha : public PollingComponent, public AsyncWebHandler {
   uint32_t network_registration_attempt_ms_ = 0;
   void network_tick_();
   static void network_event_(void *arg, esp_event_base_t base, int32_t id, void *data);
-  void apply_wifi_();
   void wifi_loop_();
+  struct WifiScanNetwork {
+    std::string ssid;
+    int8_t rssi;
+    bool locked;
+  };
+  bool wifi_scan_pending_ = false, wifi_scan_running_ = false;
+  const char *wifi_scan_error_ = nullptr;
+  std::vector<WifiScanNetwork> wifi_scan_networks_;
+  void wifi_scan_start_();
+  void on_wifi_scan_results(const wifi::wifi_scan_vector_t<wifi::WiFiScanResult> &results) override;
+  void wifi_scan_finish_(std::vector<WifiScanNetwork> networks, const char *error);
+  std::string wifi_scan_json_();
   struct MqttInput {
     char topic[161] = "", payload[33] = "";
     uint32_t revision = 0, created_at = 0;

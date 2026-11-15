@@ -88,6 +88,7 @@ bool FritzboxAha::firmware_request_(bool install, const std::string &version, st
   if (std::time(nullptr) < 1700000000) error = "Uhrzeit noch nicht synchronisiert; HTTPS benoetigt eine gueltige Uhrzeit";
   else if (!wifi::global_wifi_component->is_connected()) error = "Standort-WLAN nicht verbunden";
   else if (firmware_action_ || firmware_state_.checking || firmware_state_.installing) error = "Updatevorgang bereits aktiv";
+  else if (install && (wifi_scan_pending_ || wifi_scan_running_)) error = "Bitte WLAN-Scan abwarten";
   else if (install && command_busy_) error = "Bitte laufenden Thermostat-Auftrag abwarten";
   else if (install && version != firmware_state_.latest) error = "Versionsangebot geaendert; erneut pruefen";
   else if (install) error = firmware::reject(firmware_state_, firmware_millis());
@@ -112,7 +113,8 @@ std::string FritzboxAha::firmware_json_() {
     r["failed"] = firmware_state_.failed;
     r["checking"] = firmware_state_.checking || firmware_action_ == 1;
     r["installing"] = firmware_state_.installing || firmware_action_ == 2;
-    r["can_install"] = firmware::reject(firmware_state_, firmware_millis()).empty() && !firmware_action_ && !command_busy_;
+    r["can_install"] = firmware::reject(firmware_state_, firmware_millis()).empty() && !firmware_action_ && !command_busy_ &&
+                       !wifi_scan_pending_ && !wifi_scan_running_;
     r["reason"] = firmware::reject(firmware_state_, firmware_millis());
     r["message"] = firmware_message_;
     // HTTP reads cached state only; native update objects belong to the main loop.

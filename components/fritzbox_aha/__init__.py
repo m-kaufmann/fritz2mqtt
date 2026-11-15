@@ -2,7 +2,7 @@
 import voluptuous as vol
 import esphome.codegen as cg
 import esphome.config_validation as cv
-from esphome.components import binary_sensor, sensor, text_sensor, esp32, socket
+from esphome.components import binary_sensor, sensor, text_sensor, esp32, socket, wifi
 from esphome.components.http_request.update import HttpRequestUpdate
 from esphome.const import CONF_ID, CONF_PASSWORD, CONF_USERNAME
 
@@ -45,6 +45,9 @@ CONFIG_SCHEMA = cv.All(
 )
 
 async def to_code(config):
+    wifi.enable_runtime_roaming_suppression()
+    wifi.request_wifi_scan_results()
+    wifi.request_wifi_scan_results_listener()
     var = cg.new_Pvariable(config[CONF_ID])
     await cg.register_component(var, config)
     if "firmware_update" in config:

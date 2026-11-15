@@ -48,9 +48,30 @@ class PublicPackage(unittest.TestCase):
         page = (COMPONENT / 'gateway.html').read_text()
         embedded = (COMPONENT / 'gateway_page.h').read_text().split('R"F2M(\n', 1)[1].split('\n)F2M";', 1)[0]
         self.assertEqual(page, embedded)
-        self.assertIn("'fritz2mqtt/'+config.location", page)
+        self.assertIn("namespace+'/'+config.location", page)
+        self.assertIn("config.mqtt.topic_prefix", page)
         self.assertIn("prefix+d.base+'/set'", page)
         self.assertIn('FRITZ2MQTT Gateway', page)
+
+    def test_embedded_icons(self):
+        encoded = (COMPONENT / 'gateway_icon.h').read_text()
+        page = (COMPONENT / 'gateway.html').read_text()
+        for filename, symbol, link_type, sizes in [
+            ('apple-touch-icon.png', 'GATEWAY_TOUCH_ICON', 'apple-touch-icon', '180x180'),
+            ('favicon.ico', 'GATEWAY_FAVICON', 'icon', '16x16 32x32'),
+        ]:
+            with self.subTest(filename=filename):
+                icon = (COMPONENT / filename).read_bytes()
+                if filename.endswith('.png'):
+                    self.assertEqual(icon[:8], b'\x89PNG\r\n\x1a\n')
+                    self.assertEqual(icon[16:24], b'\0\0\0\xb4\0\0\0\xb4')
+                else:
+                    self.assertEqual(icon[:6], b'\0\0\1\0\2\0')
+                    self.assertEqual(icon[6:8], bytes([16, 16]))
+                    self.assertEqual(icon[22:24], bytes([32, 32]))
+                array = encoded.split(f'{symbol}[] = {{', 1)[1].split('};', 1)[0]
+                self.assertEqual(bytes(int(value, 16) for value in re.findall(r'0x([a-f0-9]{2})', array)), icon)
+                self.assertRegex(page, rf'rel="{link_type}"[^>]*sizes="{sizes}" href="/{filename}"')
 
 if __name__ == '__main__':
     unittest.main()

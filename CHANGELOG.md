@@ -1,5 +1,15 @@
 # Änderungen
 
+## 0.1.14 – Stable (15.11.2026)
+
+- WLAN-Einrichtung und Standortwechsel nutzen dieselbe Gateway-Oberfläche. Beide WLAN-Profile werden vor dem Neustart dauerhaft gespeichert.
+- WLAN-Suche im Einrichtungs-AP und im laufenden Betrieb. Netzname, Signalstärke und Schutzstatus stehen in der Auswahlliste. Die SSID kann weiterhin von Hand eingegeben werden.
+- Der MQTT-Topic-Präfix lässt sich dauerhaft einstellen und für neue Topic-Vorschläge verwenden.
+- Gespeicherte Passwörter zeigen einen Platzhalter. Buttons sind gruppenweise ausgerichtet und der Speicherbutton wird bei Änderungen aktiv.
+- Diagnose und Firmware-Übersicht zeigen Bezeichnungen und Werte zweispaltig. Statussymbole kennzeichnen Verbindung, Prüfung, Warnung und Fehler.
+- Heizkörper-Icon für den iOS-Home-Bildschirm und den Browser-Tab. Das Favicon war im Test in Chrome sichtbar. Safari zeigte im Tab weiterhin sein Ersatzsymbol.
+- Stabiles OTA-Angebot für `esp32-4mb-v1` mit Factory- und OTA-Datei, exakt zugeordneten Build-Quellen, Lizenztexten und SHA-256-Prüfsummen.
+
 ## 0.1.4-dev – erweiterte Netzwerkdiagnose
 
 - Native WLAN-/IP-/AP-Ereigniszähler, Resetgrund und Hauptloop-Pausen in der Status-API.

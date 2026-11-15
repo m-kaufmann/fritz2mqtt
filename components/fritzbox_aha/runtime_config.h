@@ -25,6 +25,7 @@ struct Config {
   uint32_t revision = 0;
   std::string location = "site", host, username, password;
   std::string mqtt_host, mqtt_username, mqtt_password;
+  std::string mqtt_topic_prefix = "fritz2mqtt";
   unsigned mqtt_port = 8883;
   bool mqtt_tls = true;
   std::vector<Device> devices;
@@ -67,6 +68,7 @@ inline std::string validate(const Config &c) {
   if (!printable(c.username, 128) || !printable(c.password, 256)) return "FRITZ!Box-Zugang ungueltig";
   if (!printable(c.mqtt_host, 128) || c.mqtt_host.find_first_of(" /:#?@") != std::string::npos ||
       !c.mqtt_port || c.mqtt_port > 65535 || !printable(c.mqtt_username, 128) || !printable(c.mqtt_password, 256)) return "MQTT-Verbindungsdaten ungueltig";
+  if (!identifier(c.mqtt_topic_prefix, true)) return "MQTT-Topic-Praefix: nur Buchstaben, Ziffern, _ und -";
   if (c.devices.size() > MAX_DEVICES) return "Hoechstens 8 Thermostate konfigurierbar";
   std::set<std::string> ains, topics;
   for (const auto &d : c.devices) {

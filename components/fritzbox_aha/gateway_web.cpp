@@ -1,7 +1,9 @@
 #include "fritzbox_aha.h"
 #include "gateway_page.h"
+#include "gateway_icon.h"
+#include "esphome/components/captive_portal/captive_portal.h"
 #include "esphome/components/json/json_util.h"
-#include "esphome/components/wifi/wifi_component.h"
+#include "esphome/components/wifi/scan_list.h"
 #include "esp_random.h"
 #include "esp_timer.h"
 #include "nvs.h"
@@ -10,6 +12,8 @@
 #include <ctime>
 #include "esp_crt_bundle.h"
 #include "esp_sntp.h"
+#include "esp_wifi.h"
+#include "esphome/core/log.h"
 #include "esp_system.h"
 
 namespace esphome::fritzbox_aha {
@@ -50,13 +54,25 @@ void FritzboxAha::init_web_() {
   }
   runtime_config_ = config;
   auto *wifi = wifi::global_wifi_component;
+  wifi->add_scan_results_listener(this);
   auto ap = wifi->get_ap();
   ap.set_ssid("FRITZ2MQTT-" + get_mac_address().substr(6));
   ap.set_password("");
   wifi->set_ap(ap);
   wifi->set_ap_timeout(60000);
   wifi->set_reboot_timeout(0);
-  if (config->wifi_configured) set_timeout("wifi_boot", 1000, [this]() { apply_wifi_(); });
+  if (config->wifi_configured) {
+    // Register both stored profiles before WiFi chooses its initial connection.
+    wifi->clear_sta();
+    wifi->init_sta(config->wifi.size());
+    for (const auto &profile : config->wifi) {
+      if (profile.ssid.empty()) continue;
+      wifi::WiFiAP station;
+      station.set_ssid(profile.ssid);
+      station.set_password(profile.password);
+      wifi->add_sta(station);
+    }
+  }
   host_ = config->host; username_ = config->username; password_ = config->password;
   applied_revision_ = config->revision;
   char token[33];
@@ -67,30 +83,10 @@ void FritzboxAha::init_web_() {
   web_server_base::global_web_server_base->add_handler(this);
 }
 
-// WiFi APIs run only in the ESPHome main loop, never in the HTTP task.
-void FritzboxAha::apply_wifi_() {
-  auto c = config_copy_();
-  if (!c->wifi_configured) return;
-  auto *wifi = wifi::global_wifi_component;
-  // enable() may restore ESPHome's older single-network preferences. Replace
-  // them afterwards with our atomically stored two-profile configuration.
-  wifi->disable();
-  wifi->enable();
-  wifi::WiFiAP first;
-  bool have_first = false;
-  for (const auto &profile : c->wifi) {
-    if (profile.ssid.empty()) continue;
-    wifi::WiFiAP ap;
-    ap.set_ssid(profile.ssid); ap.set_password(profile.password);
-    if (!have_first) { first = ap; have_first = true; wifi->set_sta(ap); wifi->init_sta(2); }
-    wifi->add_sta(ap);
-  }
-  if (have_first) wifi->start_connecting(first);
-}
-
 void FritzboxAha::wifi_loop_() {
-  if (wifi_apply_requested_.exchange(false))
-    set_timeout("wifi_apply", 1500, [this]() { apply_wifi_(); });
+  if (wifi_restart_requested_.exchange(false))
+    set_timeout("wifi_restart", 1500, []() { App.safe_reboot(); });
+  wifi_scan_start_();
   // Migration: keep the already functioning network without reading it back
   // through HTTP. It becomes part of NVS on the next configuration save.
   auto *wifi = wifi::global_wifi_component;
@@ -111,6 +107,94 @@ void FritzboxAha::wifi_loop_() {
     }
   }
   xSemaphoreGive(web_mutex_);
+}
+
+void FritzboxAha::wifi_scan_start_() {
+  if (xSemaphoreTake(web_mutex_, 0) != pdTRUE) return;
+  if (!wifi_scan_pending_) {
+    xSemaphoreGive(web_mutex_);
+    return;
+  }
+  wifi_scan_pending_ = false;
+  wifi_scan_running_ = true;
+  xSemaphoreGive(web_mutex_);
+
+  auto *wifi = wifi::global_wifi_component;
+  if (!wifi->is_connected() || wifi->is_roaming()) {
+    wifi_scan_finish_({}, "WLAN verbindet sich gerade. Bitte erneut versuchen.");
+    return;
+  }
+  wifi->request_roaming_suppression();
+  // Schedule a driver scan without changing ESPHome's STA connection state.
+  // ESPHome consumes WIFI_EVENT_SCAN_DONE and owns the driver result buffer.
+  wifi_scan_config_t scan{};
+  scan.show_hidden = true;
+  scan.scan_type = WIFI_SCAN_TYPE_ACTIVE;
+  scan.scan_time.active.min = 100;
+  scan.scan_time.active.max = 300;
+  scan.scan_time.passive = 300;
+  scan.home_chan_dwell_time = WIFI_SCAN_HOME_CHANNEL_DWELL_DEFAULT_TIME;
+  scan.coex_background_scan = true;
+  const auto result = esp_wifi_scan_start(&scan, false);
+  if (result != ESP_OK) {
+    ESP_LOGW("fritzbox_aha", "WLAN-Scan konnte nicht starten: %s", esp_err_to_name(result));
+    wifi->release_roaming_suppression();
+    wifi_scan_finish_({}, "WLAN-Scan konnte nicht starten. Bitte erneut versuchen.");
+    return;
+  }
+  // ESPHome skips its listener callback when the driver reports zero records.
+  set_timeout("wifi_scan", 8000, [this]() {
+    wifi::global_wifi_component->release_roaming_suppression();
+    ESP_LOGW("fritzbox_aha", "WLAN-Scan ohne Ergebnisrueckmeldung");
+    wifi_scan_finish_({}, "Der WLAN-Treiber hat keine Scanergebnisse geliefert.");
+  });
+}
+
+void FritzboxAha::on_wifi_scan_results(const wifi::wifi_scan_vector_t<wifi::WiFiScanResult> &results) {
+  xSemaphoreTake(web_mutex_, portMAX_DELAY);
+  const bool scanning = wifi_scan_running_;
+  xSemaphoreGive(web_mutex_);
+  if (!scanning) return;
+  cancel_timeout("wifi_scan");
+
+  std::vector<WifiScanNetwork> networks;
+  if (wifi::global_wifi_component->is_connected()) {
+    for (const auto &result : results) {
+      bool locked = false;
+      if (wifi::should_show_scan_entry(results, result, locked))
+        networks.push_back({result.get_ssid().str(), result.get_rssi(), locked});
+    }
+    std::sort(networks.begin(), networks.end(), [](const auto &a, const auto &b) { return a.rssi > b.rssi; });
+    if (networks.size() > 32) networks.resize(32);
+  }
+  ESP_LOGD("fritzbox_aha", "WLAN-Scan: %zu APs, %zu sichtbare Netze", results.size(), networks.size());
+  wifi::global_wifi_component->release_roaming_suppression();
+  wifi_scan_finish_(std::move(networks), nullptr);
+}
+
+void FritzboxAha::wifi_scan_finish_(std::vector<WifiScanNetwork> networks, const char *error) {
+  xSemaphoreTake(web_mutex_, portMAX_DELAY);
+  wifi_scan_networks_ = std::move(networks);
+  wifi_scan_error_ = error;
+  wifi_scan_running_ = false;
+  xSemaphoreGive(web_mutex_);
+}
+
+std::string FritzboxAha::wifi_scan_json_() {
+  xSemaphoreTake(web_mutex_, portMAX_DELAY);
+  auto body = json::build_json([&](JsonObject root) {
+    root["busy"] = wifi_scan_pending_ || wifi_scan_running_;
+    if (wifi_scan_error_) root["error"] = wifi_scan_error_;
+    auto aps = root["aps"].to<JsonArray>();
+    for (const auto &network : wifi_scan_networks_) {
+      auto row = aps.add<JsonObject>();
+      row["ssid"] = network.ssid;
+      row["rssi"] = network.rssi;
+      row["lock"] = network.locked;
+    }
+  });
+  xSemaphoreGive(web_mutex_);
+  return body;
 }
 
 void FritzboxAha::apply_runtime_config_() {
@@ -140,6 +224,7 @@ std::string FritzboxAha::config_json_(const gateway::Config &c, bool secrets) {
     auto mqtt = r["mqtt"].to<JsonObject>();
     mqtt["host"] = c.mqtt_host; mqtt["port"] = c.mqtt_port; mqtt["tls"] = c.mqtt_tls;
     mqtt["username"] = c.mqtt_username; mqtt["password_set"] = !c.mqtt_password.empty();
+    mqtt["topic_prefix"] = c.mqtt_topic_prefix;
     if (secrets) mqtt["password"] = c.mqtt_password;
     auto rows = r["devices"].to<JsonArray>();
     for (const auto &d : c.devices) {
@@ -195,6 +280,7 @@ bool FritzboxAha::decode_config_(const std::string &body, const gateway::Config 
     if (mqtt.isNull() || !string_field(mqtt["host"], out.mqtt_host) || !string_field(mqtt["username"], out.mqtt_username) ||
         !mqtt["port"].is<unsigned>() || !mqtt["tls"].is<bool>()) return false;
     out.mqtt_port = mqtt["port"].as<unsigned>(); out.mqtt_tls = mqtt["tls"].as<bool>();
+    if (!mqtt["topic_prefix"].isNull() && !string_field(mqtt["topic_prefix"], out.mqtt_topic_prefix)) return false;
     if (!mqtt["password"].isNull()) {
       std::string value;
       if (!string_field(mqtt["password"], value)) return false;
@@ -320,6 +406,8 @@ std::string FritzboxAha::status_json_() {
     r["mqtt_last_input"] = mqtt_last_input_;
     auto *wifi = wifi::global_wifi_component;
     r["wifi_connected"] = wifi->is_connected();
+    r["wifi_configured"] = runtime_config_->wifi_configured;
+    r["ap_active"] = wifi->is_ap_active();
     r["wifi_ssid"] = wifi->is_connected() ? std::string(wifi->get_sta().get_ssid().c_str()) : std::string();
     r["ap_ssid"] = std::string(wifi->get_ap().get_ssid().c_str());
     r["ap_address"] = "192.168.4.1";
@@ -361,10 +449,15 @@ std::string FritzboxAha::status_json_() {
 bool FritzboxAha::canHandle(AsyncWebServerRequest *request) const {
   char buffer[AsyncWebServerRequest::URL_BUF_SIZE];
   auto url = request->url_to(buffer);
+#ifdef USE_CAPTIVE_PORTAL
+  // Keep ESPHome's DNS and scan results while routing setup to our own NVS-backed form.
+  if (request->method() == HTTP_GET && captive_portal::global_captive_portal != nullptr &&
+      captive_portal::global_captive_portal->is_active()) return url != "/config.json";
+#endif
   if (url == "/") return !request->hasParam("esphome");
-  return url == "/gateway/" || url == "/gateway" || url == "/gateway/api/status" ||
+  return url == "/favicon.ico" || url == "/apple-touch-icon.png" || url == "/gateway/" || url == "/gateway" || url == "/gateway/api/status" ||
          url == "/gateway/api/firmware" || url == "/gateway/api/firmware/check" || url == "/gateway/api/firmware/install" ||
-         url == "/gateway/api/mqtt-test" || url == "/gateway/api/config" || url == "/gateway/api/target" || url == "/gateway/api/poll";
+         url == "/gateway/api/wifi/scan" || url == "/gateway/api/mqtt-test" || url == "/gateway/api/config" || url == "/gateway/api/target" || url == "/gateway/api/poll";
 }
 
 void FritzboxAha::serve_json_(AsyncWebServerRequest *request, int code, const std::string &body) {
@@ -396,14 +489,31 @@ void FritzboxAha::handleRequest(AsyncWebServerRequest *request) {
     std::string body = json::build_json([&](JsonObject r) { r["error"] = message; }); serve_json_(request, code, body);
   };
   if (request->method() == HTTP_GET) {
+    if (url == "/favicon.ico") {
+      request->send(request->beginResponse(200, "image/vnd.microsoft.icon", GATEWAY_FAVICON, sizeof(GATEWAY_FAVICON)));
+      return;
+    }
+    if (url == "/apple-touch-icon.png") {
+      auto *response = request->beginResponse(200, "image/png", GATEWAY_TOUCH_ICON, sizeof(GATEWAY_TOUCH_ICON));
+      request->send(response);
+      return;
+    }
     if (url == "/gateway/api/firmware") { serve_json_(request, 200, firmware_json_()); return; }
     if (url == "/gateway/api/status") { serve_json_(request, 200, status_json_()); return; }
+    if (url == "/gateway/api/wifi/scan") { serve_json_(request, 200, wifi_scan_json_()); return; }
     if (url == "/gateway/api/config") { serve_json_(request, 200, config_json_(*config_copy_(), false)); return; }
     if (url == "/" || url == "/gateway" || url == "/gateway/") {
       auto *response = request->beginResponse(200, "text/html; charset=utf-8",
           reinterpret_cast<const uint8_t *>(GATEWAY_PAGE), sizeof(GATEWAY_PAGE)-1);
       response->addHeader("Cache-Control", "no-store"); request->send(response); return;
     }
+#ifdef USE_CAPTIVE_PORTAL
+    if (!url.starts_with("/gateway/api/") && captive_portal::global_captive_portal != nullptr &&
+        captive_portal::global_captive_portal->is_active()) {
+      request->redirect("http://192.168.4.1/gateway/");
+      return;
+    }
+#endif
     fail(405, "POST erforderlich"); return;
   }
   if (request->method() != HTTP_POST) { fail(405, "Methode nicht erlaubt"); return; }
@@ -440,6 +550,26 @@ void FritzboxAha::handleRequest(AsyncWebServerRequest *request) {
     if (!firmware_request_(install, version, error)) { fail(409, error); return; }
     serve_json_(request, 202, "{\"accepted\":true}"); return;
   }
+  if (url == "/gateway/api/wifi/scan") {
+    if (!json::parse_json(body, [](JsonObject root) { return root.size() == 0; })) {
+      fail(400, "Leeres JSON-Objekt erwartet");
+      return;
+    }
+    xSemaphoreTake(web_mutex_, portMAX_DELAY);
+    if (!network_ready_ || wifi_restart_requested_ || firmware_state_.installing || firmware_action_ == 2) {
+      xSemaphoreGive(web_mutex_);
+      fail(409, "WLAN-Scan gerade nicht verfuegbar");
+      return;
+    }
+    if (!wifi_scan_running_ && !wifi_scan_pending_) {
+      wifi_scan_networks_.clear();
+      wifi_scan_error_ = nullptr;
+      wifi_scan_pending_ = true;
+    }
+    xSemaphoreGive(web_mutex_);
+    serve_json_(request, 202, "{\"accepted\":true}");
+    return;
+  }
   if (url == "/gateway/api/mqtt-test") {
     if (!mqtt_connected_) { fail(409, "MQTT nicht verbunden"); return; }
     mqtt_test_requested_ = true;
@@ -467,12 +597,15 @@ void FritzboxAha::handleRequest(AsyncWebServerRequest *request) {
       xSemaphoreGive(web_mutex_); fail(409, "Auftrag aktiv oder Einrichtung inzwischen geaendert; neu laden"); return;
     }
     bool wifi_changed = next->wifi != old->wifi || next->wifi_configured != old->wifi_configured;
+    if (wifi_changed && (wifi_scan_pending_ || wifi_scan_running_)) {
+      xSemaphoreGive(web_mutex_); fail(409, "Bitte WLAN-Scan abwarten und erneut speichern"); return;
+    }
     next->revision++;
     if (!save_config_(*next)) { xSemaphoreGive(web_mutex_); fail(500, "Speichern fehlgeschlagen; bisheriger Stand bleibt aktiv"); return; }
     runtime_config_ = next;
     xSemaphoreGive(web_mutex_);
-    if (wifi_changed) wifi_apply_requested_ = true;
-    update(); serve_json_(request, 200, wifi_changed ? "{\"saved\":true,\"wifi_reconnecting\":true}" : "{\"saved\":true}"); return;
+    if (wifi_changed) wifi_restart_requested_ = true;
+    update(); serve_json_(request, 200, wifi_changed ? "{\"saved\":true,\"wifi_restarting\":true}" : "{\"saved\":true}"); return;
   }
   fail(404, "Nicht gefunden");
 }

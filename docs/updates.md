@@ -71,3 +71,17 @@ beiden Bestandsgeräte entfernt.
 
 Das Release enthält die zu den Binärdateien gehörenden Quellen,
 Builddaten, Lizenztexte und SHA-256-Prüfsummen.
+
+
+## Stable 0.1.14
+
+Der [stabile Download](https://github.com/m-kaufmann/fritz2mqtt/releases/tag/v0.1.14)
+enthält OTA- und Factory-Firmware für `esp32-4mb-v1`, zugehörige Build-Quellen,
+Lizenztexte, Abhängigkeiten und SHA-256-Prüfsummen. Die Änderungen stehen im
+[Änderungsprotokoll](../CHANGELOG.md#0114--stable-15112026).
+
+Installierte Geräte im Stable-Kanal prüfen unter **System / Firmware → Nach
+Updates suchen**. Die Installation startet erst nach Bestätigung der
+angezeigten Version. Anschließend zeigt das Gateway **0.1.14** an. WLAN-Profile,
+FRITZ!Box, MQTT und Thermostat-Zuordnungen bleiben im vorhandenen NVS-Schema
+gespeichert. Für ein Gerät ohne Firmware ist die Factory-Datei vorgesehen.

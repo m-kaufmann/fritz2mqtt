@@ -22,6 +22,14 @@ int main() {
   c.location="AK3"; c.mqtt_port=0; assert(!validate(c).empty());
   c.mqtt_port=8883; c.password=""; assert(validate(c).empty());  // WLAN-only onboarding is allowed.
   c.password="test";
+  assert(c.mqtt_topic_prefix == "fritz2mqtt");
+  c.mqtt_topic_prefix = "example";
+  assert(validate(c).empty());
+  for (auto bad : {"", "prefix/#", "two words", "prefix/other"}) {
+    c.mqtt_topic_prefix = bad;
+    assert(!validate(c).empty());
+  }
+  c.mqtt_topic_prefix = "example";
   c.devices.clear();
   for(int i=0;i<9;i++){Device d;d.ain="TEST-"+std::to_string(i);d.name="Test";c.devices.push_back(d);}
   assert(!validate(c).empty());c.devices.pop_back();assert(validate(c).empty());
