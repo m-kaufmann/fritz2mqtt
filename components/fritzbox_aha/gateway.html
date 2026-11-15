@@ -28,8 +28,9 @@ button.primary:disabled{background:#FCEDE8;border-color:#B9D1D5;color:#607A84;op
 .diagnosis-row:last-child{border-bottom:0}
 .diagnosis-row dt{font-weight:600}
 .diagnosis-row dd{margin:0;overflow-wrap:anywhere}
-.diagnosis-state{display:inline-flex;align-items:baseline;gap:8px;font-weight:650}
-.diagnosis-icon{display:inline-grid;place-items:center;align-self:start;flex:0 0 20px;height:20px;border-radius:50%;background:#F4F8F8;color:#607A84}
+.diagnosis-state{display:grid;grid-template-columns:20px minmax(0,1fr);align-items:start;gap:8px}
+.diagnosis-status-text{font-weight:650;overflow-wrap:break-word}
+.diagnosis-icon{display:inline-grid;place-items:center;width:20px;height:20px;border-radius:50%;background:#F4F8F8;color:#607A84}
 .diagnosis-state.ok{color:#17613B}.diagnosis-state.ok .diagnosis-icon{color:inherit;background:#DDF2E5}
 .diagnosis-state.warning{color:#8B5B0D}.diagnosis-state.warning .diagnosis-icon{color:inherit;background:#FFF2D8}
 .diagnosis-state.error{color:#A3372B}.diagnosis-state.error .diagnosis-icon{color:inherit;background:#FCEBEC}
@@ -72,9 +73,12 @@ function diagnosisRow(list,label,text,state,detail){
     const symbols={ok:'✓',idle:'○',pending:'◷',warning:'!',error:'✕'};
     const icon=node('span',symbols[state],'diagnosis-icon');
     icon.setAttribute('aria-hidden','true');
-    status.append(icon,node('span',text));value.append(status);
+    const body=node('span');
+    body.append(node('span',text,'diagnosis-status-text'));
+    if(detail)body.append(node('span',' · '+detail,'hint'));
+    status.append(icon,body);
+    value.append(status);
   }else value.textContent=text;
-  if(detail)value.append(node('span',' · '+detail,'hint'));
   row.append(node('dt',label),value);list.append(row);
 }
 function renderDiagnostics(status){
@@ -111,7 +115,8 @@ function renderDiagnostics(status){
     [status.ap_ssid,status.ap_address,'ohne Passwort'].filter(Boolean).join(' · '));
   diagnosisRow(metrics,'FRITZ!Box-Diagnose',diagnostic);
   diagnosisRow(metrics,'Gefundene Geräte',status.device_count>=0?String(status.device_count):'—');
-  diagnosisRow(metrics,'Broker-Bestätigungen',(status.mqtt_subacks??0)+' Befehls-Topics · '+(status.mqtt_pubacks??0)+' Messwerte');
+  diagnosisRow(metrics,'Broker-Bestätigungen',[status.mqtt_subacks??0,(status.mqtt_subacks===1?'Befehls-Topic':'Befehls-Topics'),'·',
+    status.mqtt_pubacks??0,(status.mqtt_pubacks===1?'Messwert':'Messwerte')].join(' '));
   diagnosisRow(metrics,'MQTT-Empfang',[
     (status.mqtt_rx??0)+' empfangen',(status.mqtt_accepted??0)+' angenommen',
     (status.mqtt_ignored??0)+' ignoriert',(status.mqtt_rejected??0)+' abgelehnt'
