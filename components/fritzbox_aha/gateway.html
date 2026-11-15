@@ -25,6 +25,22 @@ for(const tab of document.querySelectorAll('[role=tab]')){tab.onclick=()=>{for(c
 function createCard(d){const root=node('article',undefined,'device'),title=node('h2'),status=node('small');root.append(title,status);const values=node('div',undefined,'values'),actual=node('div'),target=node('div');const a=node('div',undefined,'value'),t=node('div',undefined,'value');actual.append(node('div','IST'),a);target.append(node('div','Derzeitiges SOLL'),t);values.append(actual,target);root.append(values);const label=node('label','Neues SOLL (°C)'),row=node('div',undefined,'input-row'),minus=node('button','−'),input=node('input'),plus=node('button','+');input.type='number';input.min=8;input.max=28;input.step=1;input.setAttribute('aria-label','Neues SOLL für '+d.name);input.value=typeof d.target==='number'?d.target:'';minus.setAttribute('aria-label','Ein Grad weniger');plus.setAttribute('aria-label','Ein Grad mehr');input.oninput=()=>{input.dataset.edited='1';};minus.onclick=()=>{input.dataset.edited='1';input.value=Math.max(8,Math.ceil(Number(input.value)||20)-1);};plus.onclick=()=>{input.dataset.edited='1';input.value=Math.min(28,Math.floor(Number(input.value)||20)+1);};row.append(minus,input,plus);label.append(row);root.append(label);const apply=node('button','Übernehmen','primary apply'),result=node('div','', 'device-status');result.setAttribute('role','status');result.setAttribute('aria-live','polite');root.append(apply,result);apply.onclick=async()=>{const target=Number(input.value);if(input.value===''||!input.checkValidity()||!Number.isFinite(target)){message('Bitte eine Temperatur von 8 bis 28 °C in ganzen Grad wählen.',true);return;}apply.disabled=true;try{const r=await api('target',{ain:d.ain,target});result.textContent=r.ignored?r.reason:'Auftrag angenommen; Rückmeldung wird geprüft';message(r.ignored?r.reason:'Auftrag angenommen; Rückmeldung wird geprüft.');await refresh();}catch(e){message(e.message+' Der Auftrag wird nicht automatisch wiederholt; bitte die Rückmeldung abwarten.',true);await refresh();}};$('devices').append(root);return{root,title,status,a,t,input,apply,result,minus,plus};}
 function render(){if(!data)return;$('location').textContent=data.location+' · eine FRITZ!Box · '+data.devices.length+' Thermostat(e)';if(Date.now()>noticeUntil){$('message').textContent=data.fresh&&data.authenticated?'FRITZ!Box verbunden · Messwerte aktuell':data.diagnostic||'Warte auf FRITZ!Box';$('message').className='status '+(data.fresh&&data.authenticated?'ok':'');}const live=new Set();for(const d of data.devices){live.add(d.ain);let c=cards.get(d.ain);if(!c){c=createCard(d);cards.set(d.ain,c);}if(c.input.value===''&&!c.input.dataset.edited&&typeof d.target==='number')c.input.value=d.target;c.title.textContent=d.name;c.status.textContent=!d.configured?'Gefunden · bitte unter Einrichtung zuordnen':!d.enabled?'Bedienung deaktiviert':!d.available?'Keine aktuellen Gerätedaten':d.error&&d.error!=='0'?'HKR-Fehler '+d.error:'Erreichbar';c.a.textContent=value(d.actual);c.a.className=typeof d.actual==='number'?'value':'value unknown';c.t.className=typeof d.target==='number'?'value':'value unknown';c.t.textContent=typeof d.target==='number'?value(d.target):d.mode==='Aus'||d.mode==='Ein'?d.mode:'—';c.apply.disabled=!!data.busy||!d.enabled||!d.ready;if(data.command_ain===d.ain)c.result.textContent=data.command_message;}for(const [ain,c]of cards)if(!live.has(ain)){c.root.remove();cards.delete(ain);}$('empty').hidden=!!data.devices.length;$('connections').replaceChildren();for(const [name,v]of [['WLAN',data.wifi_connected?data.wifi_ssid:'Nicht verbunden'],['Einrichtungs-AP',data.ap_ssid+' · '+data.ap_address+' · ohne Passwort'],['FRITZ!Box',data.connected?'HTTP erreichbar':'Nicht erreichbar'],['Anmeldung',data.authenticated?data.method:'Nicht angemeldet'],['Diagnose',data.diagnostic],['MQTT',data.mqtt],['Befehls-Topics bestätigt',String(data.mqtt_subacks??0)],['Messwerte bestätigt (Broker)',String(data.mqtt_pubacks??0)],['MQTT empfangen / angenommen / ignoriert / abgelehnt',[data.mqtt_rx??0,data.mqtt_accepted??0,data.mqtt_ignored??0,data.mqtt_rejected??0].join(' / ')],['Letzter MQTT-Eingang',data.mqtt_last_input||'—'],['Betriebszeit',Math.floor(data.uptime/60)+' min'],['Einrichtungsstand','Version '+data.revision]]){$('connections').append(node('dt',name),node('dd',v));}$('details').replaceChildren();for(const d of data.devices){const tr=node('tr');for(const v of[d.name,d.ain,d.model,value(d.battery,' %'),'Nicht verfügbar',d.available?(d.battery_low==='1'?'Batterie wechseln':'Erreichbar'):'Keine aktuellen Daten'])tr.append(node('td',v));$('details').append(tr);}renderDiscovery();}
 function field(parent,labelText,obj,key,type='text',max=160){const label=node('label'),input=node('input');label.append(node('span',labelText,'field-label'));input.type=type;input.dataset.key=key;input.maxLength=max;if(type==='checkbox'){label.className='check';input.checked=!!obj[key];}else input.value=obj[key]??'';input.oninput=()=>{obj[key]=type==='checkbox'?input.checked:type==='number'?Number(input.value):input.value;mark();};label.append(input);parent.append(label);return input;}
+async function findWifiNetworks(){
+  if(location.hostname==='192.168.4.1'&&!data?.wifi_connected){
+    const response=await fetch('/config.json',{cache:'no-store',signal:AbortSignal.timeout(5000)});
+    if(!response.ok)throw Error('WLAN-Liste konnte nicht geladen werden.');
+    return (await response.json()).aps;
+  }
+  await api('wifi/scan',{});
+  const deadline=Date.now()+15000;
+  do{
+    await new Promise(resolve=>setTimeout(resolve,500));
+    const result=await api('wifi/scan');
+    if(result.error)throw Error(result.error);
+    if(!result.busy)return result.aps;
+  }while(Date.now()<deadline);
+  throw Error('WLAN-Suche dauert zu lange. Bitte erneut versuchen.');
+}
 function wifiForm(){
   $('wifi').replaceChildren();
   config.wifi.forEach((w,i)=>{
@@ -44,36 +60,35 @@ function wifiForm(){
       open.checked=w.ssid===originalSsid&&originalOpen;w.open=open.checked;password.disabled=open.checked;
       password.previousElementSibling.textContent='WLAN-Passwort'+(w.password_set&&w.ssid===originalSsid?' (gespeichert)':'');
     });
-    if(location.hostname==='192.168.4.1'){
-      const actions=node('div',undefined,'actions'), scan=node('button','Gefundene WLANs anzeigen');
-      const label=node('label','Netzwerk für WLAN '+(i+1)+' auswählen'), select=node('select');
-      label.hidden=true;label.append(select);
-      scan.onclick=async()=>{
-        scan.disabled=true;
-        try{
-          const response=await fetch('/config.json',{cache:'no-store',signal:AbortSignal.timeout(5000)});
-          if(!response.ok)throw Error();
-          const {aps}=await response.json();
-          select.replaceChildren(node('option','WLAN auswählen'));
-          select.options[0].value='';
-          for(const ap of aps.filter(ap=>ap.ssid)){
-            const option=node('option',ap.ssid+' · '+ap.rssi+' dBm'+(ap.lock?' · geschützt':' · offen'));
-            option.value=ap.ssid;option.dataset.open=ap.lock?'0':'1';select.append(option);
-          }
-          label.hidden=select.options.length===1;
-          if(label.hidden)message('Noch keine WLANs gefunden. Liste erneut abrufen oder SSID eingeben.',true);
-          else select.focus();
-        }catch{message('WLAN-Liste konnte nicht geladen werden. SSID kann direkt eingetragen werden.',true);}
-        finally{scan.disabled=false;}
-      };
-      select.onchange=()=>{
-        if(!select.value)return;
-        if(ssid.value!==select.value){ssid.value=select.value;ssid.dispatchEvent(new Event('input'));}
-        open.checked=select.selectedOptions[0].dataset.open==='1';open.dispatchEvent(new Event('input'));
-        if(!open.checked)password.focus();
-      };
-      actions.append(scan);section.append(actions,label);
-    }
+    const actions=node('div',undefined,'actions'), scan=node('button','WLANs suchen');
+    const label=node('label','Netzwerk für WLAN '+(i+1)+' auswählen'), select=node('select');
+    label.hidden=true;label.append(select);
+    scan.onclick=async()=>{
+      scan.disabled=true;scan.textContent='WLAN-Suche läuft …';label.hidden=true;
+      try{
+        const aps=await findWifiNetworks();
+        select.replaceChildren(node('option','WLAN auswählen'));
+        select.options[0].value='';
+        for(const ap of aps.filter(ap=>ap.ssid)){
+          const option=node('option',ap.ssid+' · '+ap.rssi+' dBm'+(ap.lock?' · geschützt':' · offen'));
+          option.value=ap.ssid;option.dataset.open=ap.lock?'0':'1';select.append(option);
+        }
+        label.hidden=select.options.length===1;
+        if(label.hidden)message('Keine WLANs gefunden. Erneut suchen oder SSID eingeben.');
+        else select.focus();
+      }catch(e){
+        message(e.message+' Die SSID kann direkt eingegeben werden.',true);
+      }finally{
+        scan.disabled=false;scan.textContent='WLANs suchen';
+      }
+    };
+    select.onchange=()=>{
+      if(!select.value)return;
+      if(ssid.value!==select.value){ssid.value=select.value;ssid.dispatchEvent(new Event('input'));}
+      open.checked=select.selectedOptions[0].dataset.open==='1';open.dispatchEvent(new Event('input'));
+      if(!open.checked)password.focus();
+    };
+    actions.append(scan);section.append(actions,label);
     $('wifi').append(section);
   });
 }

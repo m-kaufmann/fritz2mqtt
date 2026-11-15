@@ -38,8 +38,13 @@ Das Flashwerkzeug muss die geschriebenen Daten anschließend erfolgreich verifiz
 
 1. Mit dem WLAN **`FRITZ2MQTT-xxxxxx`** verbinden. Die Endung ist geräteabhängig. Der Einrichtungs-AP ist ohne Passwort.
 2. Der Einrichtungsdialog des Handys öffnet die Gateway-Oberfläche. Falls er ausbleibt, im Browser **`http://192.168.4.1/`** öffnen.
-3. Unter **Einrichtung → WLAN und Einrichtungs-AP** bei **WLAN 1** oder **WLAN 2** „Gefundene WLANs anzeigen“ wählen. Das Gateway scannt beim Start des Einrichtungs-APs. Das Netz auswählen oder die SSID von Hand eingeben, dann das Passwort eintragen und „Speichern und anwenden“ wählen. Für einen neuen Standort kann das andere WLAN-Profil belegt bleiben.
+3. Unter **Einrichtung → WLAN und Einrichtungs-AP** bei **WLAN 1** oder **WLAN 2** „WLANs suchen“ wählen. Das Gateway scannt beim Start des Einrichtungs-APs. Das Netz auswählen oder die SSID von Hand eingeben, dann das Passwort eintragen und „Speichern und anwenden“ wählen. Für einen neuen Standort kann das andere WLAN-Profil belegt bleiben.
 4. Nach dem automatischen Neustart wieder mit dem normalen Netzwerk verbinden. Das Gateway erhält dort eine Adresse vom Router und ist unter **`http://fritz2mqtt-xxxxxx.local/`** erreichbar, sofern mDNS im Netzwerk unterstützt wird. Alternativ die IP-Adresse im Router oder seriellen Startprotokoll nachsehen.
+
+„WLANs suchen“ steht auch im laufenden Betrieb zur Verfügung. Dann startet der
+ESP einen einzelnen Hintergrundscan. Die Liste zeigt Signalstärke und
+Verschlüsselungsstatus. Die Auswahl füllt das gewählte Profil aus. Gespeichert
+und angewendet wird es erst mit „Speichern und anwenden“.
 
 Die ersten Tests haben bestätigt: Der AP startet, die WLAN-Einstellung wird gespeichert und bleibt nach Neustart und OTA-Wartungsupload erhalten. Die vollständige Ausfallprobe beider gespeicherten WLANs ist gesondert zu prüfen. Ohne erreichbares Standort-WLAN ist der Fallback-AP nach 60 Sekunden vorgesehen.
 

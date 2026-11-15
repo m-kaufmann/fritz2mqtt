@@ -124,6 +124,18 @@ class FritzboxAha : public PollingComponent, public AsyncWebHandler {
   void network_tick_();
   static void network_event_(void *arg, esp_event_base_t base, int32_t id, void *data);
   void wifi_loop_();
+  struct WifiScanNetwork {
+    std::string ssid;
+    int8_t rssi;
+    bool locked;
+  };
+  bool wifi_scan_pending_ = false, wifi_scan_running_ = false;
+  const char *wifi_scan_error_ = nullptr;
+  std::vector<WifiScanNetwork> wifi_scan_networks_;
+  void wifi_scan_start_();
+  static void wifi_scan_task_(void *arg);
+  void wifi_scan_finish_(std::vector<WifiScanNetwork> networks, const char *error);
+  std::string wifi_scan_json_();
   struct MqttInput {
     char topic[161] = "", payload[33] = "";
     uint32_t revision = 0, created_at = 0;
