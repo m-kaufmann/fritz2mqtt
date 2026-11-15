@@ -1,14 +1,14 @@
 {
   "name": "FRITZ2MQTT · Stable",
-  "version": "0.1.14",
+  "version": "0.1.16",
   "builds": [
     {
       "chipFamily": "ESP32",
       "ota": {
-        "md5": "b72f627c590590f0273a7f118a2d4678",
-        "path": "https://m-kaufmann.github.io/fritz2mqtt/firmware/esp32-4mb-v1/0.1.14/firmware.ota.bin",
-        "release_url": "https://github.com/m-kaufmann/fritz2mqtt/releases/tag/v0.1.14",
-        "summary": "WLAN-Einrichtung mit Netzwerksuche, MQTT-Topic-Präfix und überarbeiteter Diagnose"
+        "md5": "585271ab46f2f0594f3ec2c09b6154c6",
+        "path": "https://m-kaufmann.github.io/fritz2mqtt/firmware/esp32-4mb-v1/0.1.16/firmware.ota.bin",
+        "release_url": "https://github.com/m-kaufmann/fritz2mqtt/releases/tag/v0.1.16",
+        "summary": "Topic-Details bleiben geöffnet; Stellaufträge werden am gewählten Thermostat markiert"
       }
     }
   ]
