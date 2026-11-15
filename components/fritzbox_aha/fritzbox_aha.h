@@ -115,7 +115,7 @@ class FritzboxAha : public PollingComponent, public AsyncWebHandler {
   uint32_t web_observation_at_ = 0, web_revision_ = 0;
   std::vector<protocol::Thermostat> discovered_, web_devices_;
   std::string web_command_ain_, web_command_message_ = "Bereit", active_command_ain_, csrf_token_;
-  std::atomic<bool> wifi_apply_requested_{false}, network_ready_{false};
+  std::atomic<bool> wifi_restart_requested_{false}, network_ready_{false};
   std::atomic<bool> wifi_events_registered_{false}, ip_events_registered_{false};
   std::atomic<uint32_t> last_loop_ms_{0}, max_loop_gap_ms_{0};
   std::atomic<uint32_t> wifi_connects_{0}, wifi_disconnects_{0}, last_disconnect_ms_{0},
@@ -123,7 +123,6 @@ class FritzboxAha : public PollingComponent, public AsyncWebHandler {
   uint32_t network_registration_attempt_ms_ = 0;
   void network_tick_();
   static void network_event_(void *arg, esp_event_base_t base, int32_t id, void *data);
-  void apply_wifi_();
   void wifi_loop_();
   struct MqttInput {
     char topic[161] = "", payload[33] = "";

@@ -1,5 +1,6 @@
 #include "fritzbox_aha.h"
 #include "gateway_page.h"
+#include "esphome/components/captive_portal/captive_portal.h"
 #include "esphome/components/json/json_util.h"
 #include "esphome/components/wifi/wifi_component.h"
 #include "esp_random.h"
@@ -56,7 +57,18 @@ void FritzboxAha::init_web_() {
   wifi->set_ap(ap);
   wifi->set_ap_timeout(60000);
   wifi->set_reboot_timeout(0);
-  if (config->wifi_configured) set_timeout("wifi_boot", 1000, [this]() { apply_wifi_(); });
+  if (config->wifi_configured) {
+    // Register both stored profiles before WiFi chooses its initial connection.
+    wifi->clear_sta();
+    wifi->init_sta(config->wifi.size());
+    for (const auto &profile : config->wifi) {
+      if (profile.ssid.empty()) continue;
+      wifi::WiFiAP station;
+      station.set_ssid(profile.ssid);
+      station.set_password(profile.password);
+      wifi->add_sta(station);
+    }
+  }
   host_ = config->host; username_ = config->username; password_ = config->password;
   applied_revision_ = config->revision;
   char token[33];
@@ -67,30 +79,9 @@ void FritzboxAha::init_web_() {
   web_server_base::global_web_server_base->add_handler(this);
 }
 
-// WiFi APIs run only in the ESPHome main loop, never in the HTTP task.
-void FritzboxAha::apply_wifi_() {
-  auto c = config_copy_();
-  if (!c->wifi_configured) return;
-  auto *wifi = wifi::global_wifi_component;
-  // enable() may restore ESPHome's older single-network preferences. Replace
-  // them afterwards with our atomically stored two-profile configuration.
-  wifi->disable();
-  wifi->enable();
-  wifi::WiFiAP first;
-  bool have_first = false;
-  for (const auto &profile : c->wifi) {
-    if (profile.ssid.empty()) continue;
-    wifi::WiFiAP ap;
-    ap.set_ssid(profile.ssid); ap.set_password(profile.password);
-    if (!have_first) { first = ap; have_first = true; wifi->set_sta(ap); wifi->init_sta(2); }
-    wifi->add_sta(ap);
-  }
-  if (have_first) wifi->start_connecting(first);
-}
-
 void FritzboxAha::wifi_loop_() {
-  if (wifi_apply_requested_.exchange(false))
-    set_timeout("wifi_apply", 1500, [this]() { apply_wifi_(); });
+  if (wifi_restart_requested_.exchange(false))
+    set_timeout("wifi_restart", 1500, []() { App.safe_reboot(); });
   // Migration: keep the already functioning network without reading it back
   // through HTTP. It becomes part of NVS on the next configuration save.
   auto *wifi = wifi::global_wifi_component;
@@ -140,6 +131,7 @@ std::string FritzboxAha::config_json_(const gateway::Config &c, bool secrets) {
     auto mqtt = r["mqtt"].to<JsonObject>();
     mqtt["host"] = c.mqtt_host; mqtt["port"] = c.mqtt_port; mqtt["tls"] = c.mqtt_tls;
     mqtt["username"] = c.mqtt_username; mqtt["password_set"] = !c.mqtt_password.empty();
+    mqtt["topic_prefix"] = c.mqtt_topic_prefix;
     if (secrets) mqtt["password"] = c.mqtt_password;
     auto rows = r["devices"].to<JsonArray>();
     for (const auto &d : c.devices) {
@@ -195,6 +187,7 @@ bool FritzboxAha::decode_config_(const std::string &body, const gateway::Config 
     if (mqtt.isNull() || !string_field(mqtt["host"], out.mqtt_host) || !string_field(mqtt["username"], out.mqtt_username) ||
         !mqtt["port"].is<unsigned>() || !mqtt["tls"].is<bool>()) return false;
     out.mqtt_port = mqtt["port"].as<unsigned>(); out.mqtt_tls = mqtt["tls"].as<bool>();
+    if (!mqtt["topic_prefix"].isNull() && !string_field(mqtt["topic_prefix"], out.mqtt_topic_prefix)) return false;
     if (!mqtt["password"].isNull()) {
       std::string value;
       if (!string_field(mqtt["password"], value)) return false;
@@ -361,6 +354,11 @@ std::string FritzboxAha::status_json_() {
 bool FritzboxAha::canHandle(AsyncWebServerRequest *request) const {
   char buffer[AsyncWebServerRequest::URL_BUF_SIZE];
   auto url = request->url_to(buffer);
+#ifdef USE_CAPTIVE_PORTAL
+  // Keep ESPHome's DNS and scan results while routing setup to our own NVS-backed form.
+  if (request->method() == HTTP_GET && captive_portal::global_captive_portal != nullptr &&
+      captive_portal::global_captive_portal->is_active()) return url != "/config.json";
+#endif
   if (url == "/") return !request->hasParam("esphome");
   return url == "/gateway/" || url == "/gateway" || url == "/gateway/api/status" ||
          url == "/gateway/api/firmware" || url == "/gateway/api/firmware/check" || url == "/gateway/api/firmware/install" ||
@@ -404,6 +402,13 @@ void FritzboxAha::handleRequest(AsyncWebServerRequest *request) {
           reinterpret_cast<const uint8_t *>(GATEWAY_PAGE), sizeof(GATEWAY_PAGE)-1);
       response->addHeader("Cache-Control", "no-store"); request->send(response); return;
     }
+#ifdef USE_CAPTIVE_PORTAL
+    if (!url.starts_with("/gateway/api/") && captive_portal::global_captive_portal != nullptr &&
+        captive_portal::global_captive_portal->is_active()) {
+      request->redirect("http://192.168.4.1/gateway/");
+      return;
+    }
+#endif
     fail(405, "POST erforderlich"); return;
   }
   if (request->method() != HTTP_POST) { fail(405, "Methode nicht erlaubt"); return; }
@@ -471,8 +476,8 @@ void FritzboxAha::handleRequest(AsyncWebServerRequest *request) {
     if (!save_config_(*next)) { xSemaphoreGive(web_mutex_); fail(500, "Speichern fehlgeschlagen; bisheriger Stand bleibt aktiv"); return; }
     runtime_config_ = next;
     xSemaphoreGive(web_mutex_);
-    if (wifi_changed) wifi_apply_requested_ = true;
-    update(); serve_json_(request, 200, wifi_changed ? "{\"saved\":true,\"wifi_reconnecting\":true}" : "{\"saved\":true}"); return;
+    if (wifi_changed) wifi_restart_requested_ = true;
+    update(); serve_json_(request, 200, wifi_changed ? "{\"saved\":true,\"wifi_restarting\":true}" : "{\"saved\":true}"); return;
   }
   fail(404, "Nicht gefunden");
 }

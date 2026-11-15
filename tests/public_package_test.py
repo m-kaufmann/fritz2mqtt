@@ -48,7 +48,8 @@ class PublicPackage(unittest.TestCase):
         page = (COMPONENT / 'gateway.html').read_text()
         embedded = (COMPONENT / 'gateway_page.h').read_text().split('R"F2M(\n', 1)[1].split('\n)F2M";', 1)[0]
         self.assertEqual(page, embedded)
-        self.assertIn("'fritz2mqtt/'+config.location", page)
+        self.assertIn("namespace+'/'+config.location", page)
+        self.assertIn("config.mqtt.topic_prefix", page)
         self.assertIn("prefix+d.base+'/set'", page)
         self.assertIn('FRITZ2MQTT Gateway', page)
 

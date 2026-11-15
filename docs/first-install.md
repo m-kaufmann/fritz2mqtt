@@ -37,9 +37,9 @@ Das Flashwerkzeug muss die geschriebenen Daten anschließend erfolgreich verifiz
 ## 3. Einrichtung über den Access Point
 
 1. Mit dem WLAN **`FRITZ2MQTT-xxxxxx`** verbinden. Die Endung ist geräteabhängig. Der Einrichtungs-AP ist ohne Passwort.
-2. Im Browser ausdrücklich **`http://192.168.4.1/`** öffnen; das geht beispielsweise vom Handy.
-3. Unter **Einrichtung → WLAN und Einrichtungs-AP** zunächst nur das Standort-WLAN eintragen und speichern. Ein zweites WLAN-Profil ist optional.
-4. Nach dem Verbindungswechsel wieder mit dem normalen Netzwerk verbinden. Das Gateway erhält dort eine Adresse vom Router und ist unter **`http://fritz2mqtt-xxxxxx.local/`** erreichbar, sofern mDNS im Netzwerk unterstützt wird. Alternativ die IP-Adresse im Router oder seriellen Startprotokoll nachsehen.
+2. Der Einrichtungsdialog des Handys öffnet die Gateway-Oberfläche. Falls er ausbleibt, im Browser **`http://192.168.4.1/`** öffnen.
+3. Unter **Einrichtung → WLAN und Einrichtungs-AP** bei **WLAN 1** oder **WLAN 2** „Gefundene WLANs anzeigen“ wählen. Das Gateway scannt beim Start des Einrichtungs-APs. Das Netz auswählen oder die SSID von Hand eingeben, dann das Passwort eintragen und „Speichern und anwenden“ wählen. Für einen neuen Standort kann das andere WLAN-Profil belegt bleiben.
+4. Nach dem automatischen Neustart wieder mit dem normalen Netzwerk verbinden. Das Gateway erhält dort eine Adresse vom Router und ist unter **`http://fritz2mqtt-xxxxxx.local/`** erreichbar, sofern mDNS im Netzwerk unterstützt wird. Alternativ die IP-Adresse im Router oder seriellen Startprotokoll nachsehen.
 
 Die ersten Tests haben bestätigt: Der AP startet, die WLAN-Einstellung wird gespeichert und bleibt nach Neustart und OTA-Wartungsupload erhalten. Die vollständige Ausfallprobe beider gespeicherten WLANs ist gesondert zu prüfen. Ohne erreichbares Standort-WLAN ist der Fallback-AP nach 60 Sekunden vorgesehen.
 
@@ -51,7 +51,7 @@ Beim MQTT-Server **nur den Hostnamen** eintragen, ohne `http://`. Port und TLS m
 
 Die Brokerverbindung funktioniert auch ohne Topics. Für erste Netzwerktests können sämtliche Topics leer bleiben. Bei einem zweiten Testgerät keine produktiven Befehls-Topics abonnieren: Sonst würden mehrere Gateways denselben Befehl verarbeiten. Zunächst einen eigenen Topicbereich verwenden.
 
-Für ein zugeordnetes Thermostat die Rückmeldungen IST, gemeldetes SOLL und Batterie sowie das Befehls-Topic einzeln festlegen. Vorgeschlagene Topics lassen sich ändern. Payloads sind Dezimalzahlen; `9.9` bedeutet „kein Stellauftrag“ und wird nicht an die FRITZ!Box weitergereicht.
+Unter **Einrichtung → Thermostate zuordnen** den **MQTT-Topic-Präfix** eintragen. Der Standard ist `fritz2mqtt`. „Topics vorbelegen“ erzeugt aus Präfix, Location, Unit und Datenpunktbasis die Vorschläge für IST, gemeldetes SOLL, Batterie und den neuen Sollwert. Bestehende Topics werden erst durch die Vorbelegung am jeweiligen Thermostat oder durch direktes Bearbeiten geändert. Payloads sind Dezimalzahlen; `9.9` bedeutet „kein Stellauftrag“ und wird nicht an die FRITZ!Box weitergereicht.
 
 Leere Passwortfelder behalten bei unveränderter Verbindung das gespeicherte Passwort. Die Webseite liest Passwörter nicht zurück. Für ein wirklich offenes WLAN die entsprechende Auswahl verwenden. Einstellungen werden auf dem ESP gespeichert; Firmware und Quellen enthalten keine Standort-Zugangsdaten.
 
