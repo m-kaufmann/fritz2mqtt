@@ -13,6 +13,7 @@
 #include "esp_crt_bundle.h"
 #include "esp_sntp.h"
 #include "esp_wifi.h"
+#include "esphome/core/log.h"
 #include "esp_system.h"
 
 namespace esphome::fritzbox_aha {
@@ -134,31 +135,48 @@ void FritzboxAha::wifi_scan_start_() {
 void FritzboxAha::wifi_scan_task_(void *arg) {
   {
     auto *self = static_cast<FritzboxAha *>(arg);
-    wifi_scan_config_t scan{};
-    scan.scan_type = WIFI_SCAN_TYPE_ACTIVE;
-    scan.scan_time.active.min = 30;
-    scan.scan_time.active.max = 90;
+    constexpr uint16_t MAX_RECORDS = 32;
+    auto records = std::unique_ptr<wifi_ap_record_t[]>(new (std::nothrow) wifi_ap_record_t[MAX_RECORDS]);
     std::vector<WifiScanNetwork> networks;
-    const char *error = nullptr;
-    if (esp_wifi_scan_start(&scan, true) != ESP_OK) {
-      error = "WLAN-Scan konnte nicht abgeschlossen werden. Bitte erneut versuchen.";
-    } else {
-      constexpr uint16_t MAX_RECORDS = 32;
-      auto records = std::unique_ptr<wifi_ap_record_t[]>(new (std::nothrow) wifi_ap_record_t[MAX_RECORDS]);
-      uint16_t count = MAX_RECORDS;
-      if (!records || esp_wifi_scan_get_ap_records(&count, records.get()) != ESP_OK) {
-        esp_wifi_clear_ap_list();
-        error = "WLAN-Scanergebnis konnte nicht gelesen werden.";
-      } else {
-        // IDF returns the strongest APs first. One list entry per SSID is enough.
-        for (uint16_t i = 0; i < count; ++i) {
-          const auto &ap = records[i];
-          const auto *ssid = reinterpret_cast<const char *>(ap.ssid);
-          if (*ssid && std::none_of(networks.begin(), networks.end(), [&](const auto &n) { return n.ssid == ssid; }))
-            networks.push_back({ssid, ap.rssi, ap.authmode != WIFI_AUTH_OPEN});
-        }
+    const char *error = records ? nullptr : "Kein Speicher fuer die WLAN-Ergebnisse frei.";
+    wifi_scan_config_t scan{};
+    scan.show_hidden = true;
+    scan.home_chan_dwell_time = WIFI_SCAN_HOME_CHANNEL_DWELL_DEFAULT_TIME;
+    scan.coex_background_scan = true;
+    scan.scan_time.active.min = 100;
+    scan.scan_time.active.max = 300;
+    scan.scan_time.passive = 300;
+
+    // A passive pass listens for beacons when active probing yielded no named networks.
+    for (const auto mode : {WIFI_SCAN_TYPE_ACTIVE, WIFI_SCAN_TYPE_PASSIVE}) {
+      if (error || !networks.empty() || !self->network_ready_) break;
+      scan.scan_type = mode;
+      auto result = esp_wifi_scan_start(&scan, true);
+      uint16_t total = 0, count = MAX_RECORDS;
+      if (result == ESP_OK) {
+        result = esp_wifi_scan_get_ap_num(&total);
+        if (result == ESP_OK && total != 0)
+          result = esp_wifi_scan_get_ap_records(&count, records.get());
+        if (result != ESP_OK || total == 0) esp_wifi_clear_ap_list();
       }
+      if (result != ESP_OK) {
+        ESP_LOGW("fritzbox_aha", "WLAN-Scan (%s): %s", mode == WIFI_SCAN_TYPE_ACTIVE ? "aktiv" : "passiv",
+                 esp_err_to_name(result));
+        error = "WLAN-Scan konnte nicht abgeschlossen werden. Bitte erneut versuchen.";
+        break;
+      }
+      // The driver sorts by RSSI. Consolidate repeat BSSIDs under one SSID.
+      for (uint16_t i = 0; total != 0 && i < count; ++i) {
+        const auto &ap = records[i];
+        const auto *ssid = reinterpret_cast<const char *>(ap.ssid);
+        if (*ssid && std::none_of(networks.begin(), networks.end(), [&](const auto &n) { return n.ssid == ssid; }))
+          networks.push_back({ssid, ap.rssi, ap.authmode != WIFI_AUTH_OPEN});
+      }
+      ESP_LOGD("fritzbox_aha", "WLAN-Scan (%s): %u APs, %u sichtbare Netze",
+               mode == WIFI_SCAN_TYPE_ACTIVE ? "aktiv" : "passiv", static_cast<unsigned>(total),
+               static_cast<unsigned>(networks.size()));
     }
+    if (!self->network_ready_) error = "WLAN-Verbindung unterbrochen. Bitte erneut versuchen.";
     wifi::global_wifi_component->release_roaming_suppression();
     self->wifi_scan_finish_(std::move(networks), error);
   }
