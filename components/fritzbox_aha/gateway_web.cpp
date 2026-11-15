@@ -455,7 +455,7 @@ bool FritzboxAha::canHandle(AsyncWebServerRequest *request) const {
       captive_portal::global_captive_portal->is_active()) return url != "/config.json";
 #endif
   if (url == "/") return !request->hasParam("esphome");
-  return url == "/favicon.png" || url == "/apple-touch-icon.png" || url == "/gateway/" || url == "/gateway" || url == "/gateway/api/status" ||
+  return url == "/favicon.ico" || url == "/apple-touch-icon.png" || url == "/gateway/" || url == "/gateway" || url == "/gateway/api/status" ||
          url == "/gateway/api/firmware" || url == "/gateway/api/firmware/check" || url == "/gateway/api/firmware/install" ||
          url == "/gateway/api/wifi/scan" || url == "/gateway/api/mqtt-test" || url == "/gateway/api/config" || url == "/gateway/api/target" || url == "/gateway/api/poll";
 }
@@ -489,8 +489,8 @@ void FritzboxAha::handleRequest(AsyncWebServerRequest *request) {
     std::string body = json::build_json([&](JsonObject r) { r["error"] = message; }); serve_json_(request, code, body);
   };
   if (request->method() == HTTP_GET) {
-    if (url == "/favicon.png") {
-      request->send(request->beginResponse(200, "image/png", GATEWAY_FAVICON, sizeof(GATEWAY_FAVICON)));
+    if (url == "/favicon.ico") {
+      request->send(request->beginResponse(200, "image/vnd.microsoft.icon", GATEWAY_FAVICON, sizeof(GATEWAY_FAVICON)));
       return;
     }
     if (url == "/apple-touch-icon.png") {
