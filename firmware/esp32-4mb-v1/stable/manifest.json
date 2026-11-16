@@ -1,14 +1,14 @@
 {
   "name": "FRITZ2MQTT · Stable",
-  "version": "0.1.16",
+  "version": "0.1.17",
   "builds": [
     {
       "chipFamily": "ESP32",
       "ota": {
-        "md5": "585271ab46f2f0594f3ec2c09b6154c6",
-        "path": "https://m-kaufmann.github.io/fritz2mqtt/firmware/esp32-4mb-v1/0.1.16/firmware.ota.bin",
-        "release_url": "https://github.com/m-kaufmann/fritz2mqtt/releases/tag/v0.1.16",
-        "summary": "Topic-Details bleiben geöffnet; Stellaufträge werden am gewählten Thermostat markiert"
+        "md5": "aa390bc64127256f8c72fbd573c55bcb",
+        "path": "https://m-kaufmann.github.io/fritz2mqtt/firmware/esp32-4mb-v1/0.1.17/firmware.ota.bin",
+        "release_url": "https://github.com/m-kaufmann/fritz2mqtt/releases/tag/v0.1.17",
+        "summary": "FRITZ!Smart Energy 200 mit Ein/Aus-Schieber und MQTT-Messwerten"
       }
     }
   ]
