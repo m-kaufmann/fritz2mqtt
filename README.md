@@ -2,7 +2,7 @@
 
 Ein eigenständiges ESP32-Gateway zwischen FRITZ!Box-Smart-Home-Geräten und MQTT. Die FRITZ!Box übernimmt DECT; der ESP32 liest ihre lokale AHA-Schnittstelle und übersetzt MQTT-Stellaufträge. Weder Home Assistant noch ein bestimmtes übergeordnetes Automationssystem sind zum Betrieb erforderlich.
 
-**Stabile Firmware für ESP32 mit 4 MB Flash:** [Download 0.1.16](https://github.com/m-kaufmann/fritz2mqtt/releases/tag/v0.1.16) mit Factory- und OTA-Datei, Quellen, Lizenzen und Prüfsummen. Die Neuerungen stehen im [Änderungsprotokoll](CHANGELOG.md).
+**Stabile Firmware für ESP32 mit 4 MB Flash:** [Download 0.1.17](https://github.com/m-kaufmann/fritz2mqtt/releases/tag/v0.1.17) mit Factory- und OTA-Datei, Quellen, Lizenzen und Prüfsummen. Die Neuerungen stehen im [Änderungsprotokoll](CHANGELOG.md).
 
 ## Funktionen
 
