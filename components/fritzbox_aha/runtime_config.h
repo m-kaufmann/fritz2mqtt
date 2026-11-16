@@ -13,6 +13,8 @@ constexpr size_t MAX_DEVICES = 8;
 struct Device {
   std::string ain, name, unit, base;
   bool enabled = false;
+  bool outlet = false;
+  std::string state_topic, power_topic, energy_topic, voltage_topic, temperature_topic;
   std::string actual_topic, target_topic, command_topic, battery_topic;
 };
 struct WifiProfile {
@@ -69,14 +71,14 @@ inline std::string validate(const Config &c) {
   if (!printable(c.mqtt_host, 128) || c.mqtt_host.find_first_of(" /:#?@") != std::string::npos ||
       !c.mqtt_port || c.mqtt_port > 65535 || !printable(c.mqtt_username, 128) || !printable(c.mqtt_password, 256)) return "MQTT-Verbindungsdaten ungueltig";
   if (!identifier(c.mqtt_topic_prefix, true)) return "MQTT-Topic-Praefix: nur Buchstaben, Ziffern, _ und -";
-  if (c.devices.size() > MAX_DEVICES) return "Hoechstens 8 Thermostate konfigurierbar";
+  if (c.devices.size() > MAX_DEVICES) return "Hoechstens 8 Geraete konfigurierbar";
   std::set<std::string> ains, topics;
   for (const auto &d : c.devices) {
     if (d.ain.empty() || !printable(d.ain, 64) || !ains.insert(d.ain).second) return "AIN fehlt, ist zu lang oder doppelt";
     if (d.name.empty() || !printable(d.name, 96)) return "Geraetename fehlt oder ist zu lang";
     if (!d.unit.empty() && (d.unit.size() > 5 || d.unit.find_first_not_of("0123456789") != std::string::npos)) return "Unit: nur Ziffern";
     if (!d.base.empty() && !identifier(d.base)) return "Datenpunktbasis: nur Buchstaben, Ziffern und _";
-    for (const auto *t : {&d.actual_topic, &d.target_topic, &d.command_topic, &d.battery_topic}) {
+    for (const auto *t : {&d.actual_topic, &d.target_topic, &d.command_topic, &d.battery_topic, &d.state_topic, &d.power_topic, &d.energy_topic, &d.voltage_topic, &d.temperature_topic}) {
       if (!topic(*t)) return "Topic ungueltig: keine Platzhalter, Leerzeichen oder leeren Segmente";
       if (!t->empty() && !topics.insert(*t).second) return "Topics muessen je Datenpunkt eindeutig sein";
     }
@@ -104,6 +106,16 @@ inline TargetPayload parse_target_payload(const std::string &payload, float &out
   out = whole + fraction;
   if (std::fabs(out - 9.9f) < 0.0001f) return TargetPayload::IGNORE;
   if (out < 8 || out > 28 || std::fabs(out * 2 - std::round(out * 2)) > 0.0001f) return TargetPayload::INVALID;
+  return TargetPayload::TARGET;
+}
+inline TargetPayload parse_switch_payload(const std::string &payload, float &out) {
+  const auto start = payload.find_first_not_of(" \t\r\n");
+  if (start == std::string::npos) return TargetPayload::INVALID;
+  const auto value = payload.substr(start, payload.find_last_not_of(" \t\r\n") - start + 1);
+  if (parse_target_payload(value, out) == TargetPayload::IGNORE) return TargetPayload::IGNORE;
+  if (value != "0" && value != "1" && value != "0.0" && value != "1.0" && value != "0.00" && value != "1.00")
+    return TargetPayload::INVALID;
+  out = value.front() - '0';
   return TargetPayload::TARGET;
 }
 inline const Device *command_device(const Config &c, const std::string &topic) {

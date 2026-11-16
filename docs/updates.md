@@ -94,3 +94,11 @@ enthält die Firmware für `esp32-4mb-v1` sowie Quellen, Lizenzen und Prüfsumme
 Bestehende Gateways finden die Version unter **System / Firmware → Nach Updates
 suchen**. Änderungen an Topic-Einrichtung und Bedienung stehen im
 [Änderungsprotokoll](../CHANGELOG.md#0116--stable-15112026).
+
+## Stable 0.1.17
+
+Der [stabile Download 0.1.17](https://github.com/m-kaufmann/fritz2mqtt/releases/tag/v0.1.17)
+enthält OTA- und Factory-Firmware für `esp32-4mb-v1`, Quellen, Lizenzen und
+Prüfsummen. Bestehende Geräte finden das Update unter **System / Firmware →
+Nach Updates suchen**. Die Änderungen zur FRITZ!Smart Energy 200 stehen im
+[Änderungsprotokoll](../CHANGELOG.md#0117--stable-16112026).

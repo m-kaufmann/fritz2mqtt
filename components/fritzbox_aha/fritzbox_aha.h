@@ -94,7 +94,7 @@ class FritzboxAha : public PollingComponent, public AsyncWebHandler, public wifi
     char mode[32] = "Unbekannt", battery_status[32] = "Unbekannt";
     float temperature = NAN, target = NAN, battery = NAN;
   };
-  struct Command { char ain[257] = ""; float target = NAN; uint32_t created_at = 0; uint32_t revision = 0; };
+  struct Command { char ain[257] = ""; float target = NAN; bool outlet = false; uint32_t created_at = 0; uint32_t revision = 0; };
   struct CommandResult { char message[160] = ""; };
   bool allow_control_ = false;
   std::atomic<bool> command_busy_{false};
@@ -159,7 +159,7 @@ class FritzboxAha : public PollingComponent, public AsyncWebHandler, public wifi
   void init_web_();
   void apply_runtime_config_();
   std::shared_ptr<const gateway::Config> config_copy_();
-  bool queue_temperature_(const std::string &ain, float target, std::string &error, uint32_t expected_revision = UINT32_MAX);
+  bool queue_temperature_(const std::string &ain, float target, std::string &error, uint32_t expected_revision = UINT32_MAX, bool outlet = false);
   std::string status_json_();
   std::string config_json_(const gateway::Config &config, bool secrets);
   bool decode_config_(const std::string &body, const gateway::Config &previous, gateway::Config &out, std::string &error);

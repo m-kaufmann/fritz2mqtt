@@ -1,5 +1,11 @@
 # Änderungen
 
+## 0.1.17 – Stable (16.11.2026)
+
+- Unterstützung für FRITZ!Smart Energy 200 über die FRITZ!Box. Steckdosen und Thermostate lassen sich gemeinsam in einem Gateway zuordnen.
+- Steckdosenkachel mit eingerichtetem Anzeigenamen und großem Ein/Aus-Schalter, der den gemeldeten Schaltzustand anzeigt. Netzspannung und Energiezähler erscheinen mit einer Nachkommastelle.
+- Eigene MQTT-Topics für Schaltbefehl, Schaltzustand, Momentanleistung, Energiezähler, Netzspannung und Temperatur.
+
 ## 0.1.16 – Stable (15.11.2026)
 
 - „Topics vorbelegen“ ist im aufgeklappten Bereich „Datenpunkte und Topics“ sichtbar. Bereits geöffnete Bereiche bleiben beim Hinzufügen und Entfernen anderer Geräte offen.

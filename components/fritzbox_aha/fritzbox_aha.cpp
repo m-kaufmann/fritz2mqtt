@@ -153,9 +153,10 @@ void FritzboxAha::execute_command_(const Command &command) {
   active_command_ain_ = command.ain;
   auto config = config_copy_();
   const auto *mapping = gateway::find(*config, command.ain);
-  uint32_t encoded;
+  uint32_t encoded = 0;
   if (!network_ready_.load() || !mapping || !mapping->enabled || config->revision != command.revision ||
-      !protocol::encode_target(command.target, encoded) || worker_millis() - command.created_at > 15000 ||
+      mapping->outlet != command.outlet ||
+      (!command.outlet && !protocol::encode_target(command.target, encoded)) || worker_millis() - command.created_at > 15000 ||
       (retry_at_ && static_cast<int32_t>(worker_millis() - retry_at_) < 0)) {
     command_result_("Nicht gesendet: Auftrag ungueltig, veraltet oder Verbindung in Wartezeit"); return;
   }
@@ -167,15 +168,30 @@ void FritzboxAha::execute_command_(const Command &command) {
     if (selected) { command_result_("Nicht gesendet: AIN nicht eindeutig"); return; }
     selected = &t;
   }
-  if (!selected || selected->present != "1" || (!selected->error.empty() && selected->error != "0") ||
+  if (!selected || selected->outlet != command.outlet || selected->present != "1" ||
+      (command.outlet && (selected->switch_lock == "1" || protocol::outlet_state(*selected) < 0)) || (!selected->error.empty() && selected->error != "0") ||
       config_copy_()->revision != command.revision || worker_millis() - command.created_at > 15000) {
     command_result_("Nicht gesendet: Thermostat nicht bereit oder Einrichtung geaendert"); return;
   }
   // Exactly one write. Ambiguous network outcomes must never trigger an automatic replay.
-  auto reply = http_("/webservices/homeautoswitch.lua?switchcmd=sethkrtsoll&sid=" + sid_ +
-                     "&ain=" + protocol::form_encode(command.ain) + "&param=" + std::to_string(encoded));
+  const bool on = command.target == 1;
+  const char *operation = command.outlet ? (on ? "setswitchon" : "setswitchoff") : "sethkrtsoll";
+  auto reply = http_(std::string("/webservices/homeautoswitch.lua?switchcmd=") + operation + "&sid=" + sid_ +
+                     "&ain=" + protocol::form_encode(command.ain) +
+                     (command.outlet ? "" : "&param=" + std::to_string(encoded)));
   bool accepted = reply.complete && reply.status == 200 && protocol::trim(reply.body) != "inval";
   bool observed = discover_devices_();
+  if (command.outlet) {
+    const std::string state = on ? "Ein" : "Aus";
+    if (observed) for (const auto &d : discovered_) {
+      if (d.ain == command.ain && d.outlet && d.present == "1" && protocol::outlet_state(d) == int(on)) {
+        command_result_(accepted ? "FRITZ!Box bestaetigt: " + state : "FRITZ!Box meldet " + state + "; Sendeantwort unklar");
+        return;
+      }
+    }
+    command_result_("Schaltzustand nicht bestaetigt: " + state);
+    return;
+  }
   char message[160];
   float reported = NAN;
   if (observed) for (const auto &t : discovered_) if (t.ain == command.ain && t.present == "1") reported = protocol::target_temperature(t);
@@ -319,6 +335,7 @@ FritzboxAha::HttpResult FritzboxAha::http_(const std::string &path, const std::s
   // A close-delimited response can finish with a native negative read/errno;
   // completeness and XML validation, not that raw code alone, decide success.
   const char *operation = path.find("switchcmd=sethkrtsoll") != std::string::npos ? "set-target" :
+      path.find("switchcmd=setswitch") != std::string::npos ? "set-switch" :
       path.find("switchcmd=getdevicelistinfos") != std::string::npos ? "devices" :
       is_post ? "login/session" : "challenge";
   wifi_ap_record_t ap{};
@@ -455,6 +472,7 @@ bool FritzboxAha::discover_devices_() {
     return false;
   }
   discovered_ = devices.thermostats;
+  discovered_.insert(discovered_.end(), devices.outlets.begin(), devices.outlets.end());
   thermostat_ = {};
   const protocol::Thermostat *selected = nullptr;
   if (thermostat_ain_.empty()) {
