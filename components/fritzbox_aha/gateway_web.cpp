@@ -429,7 +429,7 @@ std::string FritzboxAha::status_json_() {
       std::string ain = cfg ? cfg->ain : t->ain;
       if (!emitted.insert(ain).second) return;
       auto row = rows.add<JsonObject>(); row["ain"] = ain;
-      row["name"] = cfg && cfg->name != "Thermostat" ? cfg->name : t && !t->name.empty() ? t->name : cfg ? cfg->name : ain;
+      row["name"] = cfg && (cfg->outlet || cfg->name != "Thermostat") ? cfg->name : t && !t->name.empty() ? t->name : cfg ? cfg->name : ain;
       row["model"] = t ? t->product : ""; row["configured"] = cfg != nullptr;
       row["enabled"] = cfg && cfg->enabled;
       const bool outlet = cfg ? cfg->outlet : t->outlet;

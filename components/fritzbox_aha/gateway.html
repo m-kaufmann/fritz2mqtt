@@ -10,6 +10,14 @@
 #settings .check input::before{content:"";position:absolute;inset:3px auto auto 3px;width:16px;height:16px;border-radius:50%;background:#607A84}
 #settings .check input:checked{border-color:#17613B;background:#17613B}
 #settings .check input:checked::before{left:auto;right:3px;background:white}
+button.outlet-switch{display:inline-flex;align-items:center;gap:12px;margin-top:12px;min-height:52px;padding:4px 8px 4px 0;border:0;background:transparent;font-weight:650}
+.outlet-track{display:flex;align-items:center;flex:0 0 80px;width:80px;height:44px;padding:5px;border:2px solid #607A84;border-radius:24px;background:#F4F8F8}
+.outlet-track::before{content:"";width:30px;height:30px;border-radius:50%;background:#607A84}
+.outlet-switch[aria-checked=true] .outlet-track{justify-content:flex-end;border-color:#17613B;background:#17613B}
+.outlet-switch[aria-checked=true] .outlet-track::before{background:white}
+.outlet-switch:disabled{opacity:1;cursor:default}
+.outlet-switch:disabled:not(.switch-busy) .outlet-track{opacity:.55}
+@media(forced-colors:active){.outlet-track::before,.outlet-switch[aria-checked=true] .outlet-track::before{background:ButtonText}}
 .action-group{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;width:max-content;max-width:100%}
 .action-group button,.mapping-actions button{text-align:left}
 .mapping-actions{display:grid;inline-size:min(100%, 13rem);margin-top:12px}
@@ -72,10 +80,19 @@ for(const tab of document.querySelectorAll('[role=tab]')){tab.onclick=()=>{for(c
 function createCard(d){const root=node('article',undefined,'device'),title=node('h2'),status=node('small');root.append(title,status);const values=node('div',undefined,'values'),actual=node('div'),target=node('div');const a=node('div',undefined,'value'),t=node('div',undefined,'value');actual.append(node('div','IST'),a);target.append(node('div','Derzeitiges SOLL'),t);values.append(actual,target);root.append(values);const label=node('label','Neues SOLL (°C)'),row=node('div',undefined,'input-row'),minus=node('button','−'),input=node('input'),plus=node('button','+');input.type='number';input.min=8;input.max=28;input.step=1;input.setAttribute('aria-label','Neues SOLL für '+d.name);input.value=typeof d.target==='number'?d.target:'';minus.setAttribute('aria-label','Ein Grad weniger');plus.setAttribute('aria-label','Ein Grad mehr');input.oninput=()=>{input.dataset.edited='1';};minus.onclick=()=>{input.dataset.edited='1';input.value=Math.max(8,Math.ceil(Number(input.value)||20)-1);};plus.onclick=()=>{input.dataset.edited='1';input.value=Math.min(28,Math.floor(Number(input.value)||20)+1);};row.append(minus,input,plus);label.append(row);root.append(label);const apply=node('button','Übernehmen','apply primary'),result=node('div','', 'device-status');result.setAttribute('role','status');result.setAttribute('aria-live','polite');root.append(apply,result);apply.onclick=async()=>{if(pendingTarget!==null||data?.busy)return;const target=Number(input.value);if(input.value===''||!input.checkValidity()||!Number.isFinite(target)){message('Bitte eine Temperatur von 8 bis 28 °C in ganzen Grad wählen.',true);return;}pendingTarget=d.ain;renderTargetButtons();try{const r=await api('target',{ain:d.ain,target});result.textContent=r.ignored?r.reason:'Auftrag angenommen; Rückmeldung wird geprüft';message(r.ignored?r.reason:'Auftrag angenommen; Rückmeldung wird geprüft.');}catch(e){message(e.message+' Der Auftrag wird nicht automatisch wiederholt; bitte die Rückmeldung abwarten.',true);}finally{pendingTarget=null;await refresh();}};$('devices').append(root);return{root,title,status,a,t,input,apply,result,minus,plus};}
 function createOutletCard(d){
   const root=node('article',undefined,'device'),title=node('h2'),status=node('small');
-  const state=node('div',undefined,'value'), metrics=node('div',undefined,'values');
-  const apply=node('button','Einschalten','apply primary'),result=node('div','','device-status');
+  const state=node('span'), metrics=node('div',undefined,'values');
+  const apply=node('button',undefined,'outlet-switch'),result=node('div','','device-status');
+  const track=node('span',undefined,'outlet-track');
+  track.setAttribute('aria-hidden','true');
+  apply.type='button';
+  apply.setAttribute('role','switch');
+  apply.setAttribute('aria-checked','false');
+  apply.append(track,state);
   result.setAttribute('role','status');
-  root.append(title,status,node('div','Schaltzustand'),state,metrics,apply,result);
+  const controls=node('div');
+  controls.append(apply);
+  root.append(title,status,controls);
+  root.append(metrics,result);
   apply.onclick=async()=>{
     const current=data?.devices.find(device=>device.ain===d.ain);
     if(pendingTarget!==null||data?.busy||!current?.ready||!current.enabled)return;
@@ -95,15 +112,15 @@ function renderOutlet(d,c){
   c.status.textContent=!d.configured?'Gefunden · unter Einrichtung zuordnen':
     !d.available?'Keine aktuellen Daten':d.switch_locked?'Schalten über die FRITZ!Box gesperrt':
     !d.enabled?'Bedienung deaktiviert':'Erreichbar';
-  c.a.textContent=d.state===1?'Ein':d.state===0?'Aus':'—';
-  c.apply.textContent=d.state===1?'Ausschalten':'Einschalten';
+  c.apply.setAttribute('aria-checked',d.state===1);
+  c.apply.setAttribute('aria-label',d.name+' schalten');
   c.metrics.replaceChildren();
-  for(const [label,unit,reading]of [
-    ['Leistung',' W',d.power],['Energiezähler',' kWh',d.energy],
-    ['Netzspannung',' V',d.voltage],['Temperatur an der Steckdose',' °C',d.temperature]
+  for(const [label,unit,reading,minimumFractionDigits,maximumFractionDigits]of [
+    ['Leistung',' W',d.power,0,3],['Energiezähler',' kWh',d.energy,1,1],
+    ['Netzspannung',' V',d.voltage,1,1],['Temperatur an der Steckdose',' °C',d.temperature,0,1]
   ]){
     const cell=node('div');
-    cell.append(node('div',label),node('div',typeof reading==='number'?reading.toLocaleString('de-DE',{maximumFractionDigits:3})+unit:'—','value'));
+    cell.append(node('div',label),node('div',typeof reading==='number'?reading.toLocaleString('de-DE',{minimumFractionDigits,maximumFractionDigits})+unit:'—','value'));
     c.metrics.append(cell);
   }
   if(data.command_ain===d.ain)c.result.textContent=data.command_message;
@@ -113,8 +130,15 @@ function renderTargetButtons(){
   const busy=pendingTarget!==null||!!data.busy;
   const selected=pendingTarget??data.command_ain;
   for(const d of data.devices){
-    const button=cards.get(d.ain).apply;
+    const card=cards.get(d.ain),button=card.apply;
     const ready=d.enabled&&d.ready;
+    if(d.outlet){
+      const switching=busy&&d.ain===selected;
+      button.classList.toggle('switch-busy',switching);
+      button.disabled=busy||!ready||!(d.state===0||d.state===1);
+      card.a.textContent=switching?'Schaltet …':d.state===1?'Ein':d.state===0?'Aus':'Unbekannt';
+      continue;
+    }
     button.disabled=busy||!ready;
     button.classList.toggle('waiting-for-other',ready&&busy&&d.ain!==selected);
   }
@@ -310,7 +334,7 @@ $('save').onclick=async()=>{
   }
 };
 $('poll').onclick=async()=>{try{await api('poll',{});message('Neue Geräteabfrage angefordert.');}catch(e){message(e.message,true);}};
-async function refresh(){if(loading)return;loading=true;try{data=await api('status');token=data.csrf;render();}catch(e){renderDiagnostics(null);$('details').replaceChildren();for(const c of cards.values()){c.apply.disabled=true;c.apply.classList.remove('waiting-for-other');c.a.textContent='—';if(c.t)c.t.textContent='—';if(c.metrics)c.metrics.replaceChildren();c.status.textContent='Verbindung unterbrochen · wird erneut versucht';}message('Gateway nicht erreichbar: '+e.message,true,3);}finally{loading=false;}}
+async function refresh(){if(loading)return;loading=true;try{data=await api('status');token=data.csrf;render();}catch(e){renderDiagnostics(null);$('details').replaceChildren();for(const c of cards.values()){c.apply.disabled=true;c.apply.classList.remove('waiting-for-other');c.a.textContent='—';if(c.t)c.t.textContent='—';if(c.metrics){c.apply.setAttribute('aria-checked','false');c.apply.classList.remove('switch-busy');c.a.textContent='Unbekannt';c.metrics.replaceChildren();}c.status.textContent='Verbindung unterbrochen · wird erneut versucht';}message('Gateway nicht erreichbar: '+e.message,true,3);}finally{loading=false;}}
 
 let fwData=null,fwLoading=false,fwBusy=false,fwOffer='',fwOutcome='',fwOutcomeKind='warning';
 let fwExpected=null;
