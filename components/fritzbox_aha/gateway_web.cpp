@@ -232,6 +232,9 @@ std::string FritzboxAha::config_json_(const gateway::Config &c, bool secrets) {
       row["ain"] = d.ain; row["name"] = d.name; row["enabled"] = d.enabled;
       row["unit"] = d.unit; row["base"] = d.base;
       row["actual_topic"] = d.actual_topic; row["target_topic"] = d.target_topic;
+      row["outlet"] = d.outlet;
+      row["state_topic"] = d.state_topic; row["power_topic"] = d.power_topic; row["energy_topic"] = d.energy_topic;
+      row["voltage_topic"] = d.voltage_topic; row["temperature_topic"] = d.temperature_topic;
       row["command_topic"] = d.command_topic; row["battery_topic"] = d.battery_topic;
     }
   });
@@ -294,6 +297,12 @@ bool FritzboxAha::decode_config_(const std::string &body, const gateway::Config 
           !string_field(row["base"], d.base) || !row["enabled"].is<bool>() ||
           !string_field(row["actual_topic"], d.actual_topic) || !string_field(row["target_topic"], d.target_topic) ||
           !string_field(row["command_topic"], d.command_topic) || !string_field(row["battery_topic"], d.battery_topic)) return false;
+      if (!row["outlet"].isNull() && !row["outlet"].is<bool>()) return false;
+      d.outlet = row["outlet"] == true;
+      if (d.outlet &&
+          (!string_field(row["state_topic"], d.state_topic) || !string_field(row["power_topic"], d.power_topic) ||
+           !string_field(row["energy_topic"], d.energy_topic) || !string_field(row["voltage_topic"], d.voltage_topic) ||
+           !string_field(row["temperature_topic"], d.temperature_topic))) return false;
       d.enabled = row["enabled"].as<bool>(); out.devices.push_back(d);
     }
     return true;
@@ -313,19 +322,21 @@ bool FritzboxAha::save_config_(const gateway::Config &c) {
   return ok;
 }
 
-bool FritzboxAha::queue_temperature_(const std::string &ain, float target, std::string &error, uint32_t expected_revision) {
+bool FritzboxAha::queue_temperature_(const std::string &ain, float target, std::string &error, uint32_t expected_revision, bool outlet) {
   uint32_t encoded;
-  if (!protocol::encode_target(target, encoded)) { error = "Nicht gesendet: Zielwert ausserhalb 8 bis 28 C"; return false; }
+  if (outlet ? (target != 0 && target != 1) : !protocol::encode_target(target, encoded)) { error = outlet ? "Nicht gesendet: Schaltwert muss 0 oder 1 sein" :
+      "Nicht gesendet: Zielwert ausserhalb 8 bis 28 C"; return false; }
   xSemaphoreTake(web_mutex_, portMAX_DELAY);
   auto config = runtime_config_;
   const auto *mapping = gateway::find(*config, ain);
   bool ready = false;
-  for (const auto &d : web_devices_) if (d.ain == ain && d.present == "1" && (d.error.empty() || d.error == "0")) ready = true;
+  for (const auto &d : web_devices_) if (d.ain == ain && d.outlet == outlet && d.present == "1" &&
+      (outlet ? protocol::outlet_state(d) >= 0 && d.switch_lock != "1" : d.error.empty() || d.error == "0")) ready = true;
   if (firmware_state_.installing || firmware_action_ == 2) {
     xSemaphoreGive(web_mutex_); error = "Firmwareinstallation aktiv"; return false;
   }
   if ((expected_revision != UINT32_MAX && config->revision != expected_revision) ||
-      !mapping || !mapping->enabled || !commands_ || !web_last_.connected || !web_last_.authenticated ||
+      !mapping || mapping->outlet != outlet || !mapping->enabled || !commands_ || !web_last_.connected || !web_last_.authenticated ||
       web_last_.device_count < 0 || web_revision_ != config->revision || web_millis() - web_observation_at_ > 120000 || !ready) {
     xSemaphoreGive(web_mutex_); error = "Nicht gesendet: Thermostat nicht freigegeben oder keine aktuellen Daten"; return false;
   }
@@ -335,7 +346,7 @@ bool FritzboxAha::queue_temperature_(const std::string &ain, float target, std::
   }
   Command command;
   std::snprintf(command.ain, sizeof(command.ain), "%s", ain.c_str());
-  command.target = target; command.created_at = web_millis(); command.revision = config->revision;
+  command.target = target; command.outlet = outlet; command.created_at = web_millis(); command.revision = config->revision;
   if (xQueueSend(commands_, &command, 0) != pdTRUE) {
     command_busy_ = false; xSemaphoreGive(web_mutex_); error = "Auftragsspeicher belegt"; return false;
   }
@@ -421,11 +432,30 @@ std::string FritzboxAha::status_json_() {
       row["name"] = cfg && cfg->name != "Thermostat" ? cfg->name : t && !t->name.empty() ? t->name : cfg ? cfg->name : ain;
       row["model"] = t ? t->product : ""; row["configured"] = cfg != nullptr;
       row["enabled"] = cfg && cfg->enabled;
-      bool available = fresh && t && t->present == "1";
+      const bool outlet = cfg ? cfg->outlet : t->outlet;
+      row["outlet"] = outlet;
+      bool available = fresh && t && t->outlet == outlet && t->present == "1";
       row["available"] = available;
       row["ready"] = available && web_last_.connected && web_last_.authenticated && (t->error.empty() || t->error == "0");
       row["actual"] = nullptr; row["target"] = nullptr; row["battery"] = nullptr;
-      if (available) {
+      if (outlet) {
+        row["state"] = nullptr; row["power"] = nullptr; row["energy"] = nullptr;
+        row["voltage"] = nullptr; row["temperature"] = nullptr;
+        const int state = available ? protocol::outlet_state(*t) : -1;
+        row["ready"] = available && web_last_.connected && web_last_.authenticated && state >= 0 && t->switch_lock != "1";
+        if (available) {
+          if (state >= 0) row["state"] = state;
+          auto metric = [&](const char *key, double value) { if (std::isfinite(value)) row[key] = value; };
+          metric("power", protocol::meter_value(t->power));
+          metric("energy", protocol::meter_value(t->energy));
+          metric("voltage", protocol::meter_value(t->voltage));
+          metric("temperature", protocol::decimal_temperature(t->celsius));
+          metric("temperature_offset", protocol::decimal_temperature(t->offset));
+          row["switch_mode"] = t->switch_mode;
+          row["switch_locked"] = t->switch_lock == "1";
+          row["device_locked"] = t->switch_device_lock == "1";
+        }
+      } else if (available) {
         float actual = protocol::actual_temperature(*t), target = protocol::target_temperature(*t), battery = protocol::battery_percent(*t);
         if (std::isfinite(actual)) row["actual"] = actual;
         if (std::isfinite(target)) row["target"] = target;
@@ -577,16 +607,20 @@ void FritzboxAha::handleRequest(AsyncWebServerRequest *request) {
   }
   if (url == "/gateway/api/poll") { update(); serve_json_(request, 202, "{\"accepted\":true}"); return; }
   if (url == "/gateway/api/target") {
-    std::string ain; float target = NAN;
+    std::string ain; float target = NAN; bool outlet = false;
     bool parsed = json::parse_json(body, [&](JsonObject r) {
-      if (!r["ain"].is<const char *>() || !r["target"].is<float>()) return false;
-      ain = r["ain"].as<std::string>(); target = r["target"].as<float>(); return true;
+      if (!r["ain"].is<const char *>()) return false;
+      ain = r["ain"].as<std::string>();
+      outlet = r["on"].is<bool>();
+      if (outlet ? !r["target"].isNull() : !r["on"].isNull() || !r["target"].is<float>()) return false;
+      target = outlet ? static_cast<float>(r["on"].as<bool>()) : r["target"].as<float>();
+      return true;
     });
     if (parsed && protocol::no_command(target)) {
       serve_json_(request, 200, "{\"ignored\":true,\"reason\":\"Kein Stellauftrag (9.9); nichts gesendet\"}"); return;
     }
     std::string error;
-    if (!parsed || !queue_temperature_(ain, target, error)) { fail(409, parsed ? error : "Auftrag ungueltig"); return; }
+    if (!parsed || !queue_temperature_(ain, target, error, UINT32_MAX, outlet)) { fail(409, parsed ? error : "Auftrag ungueltig"); return; }
     serve_json_(request, 202, "{\"accepted\":true}"); return;
   }
   if (url == "/gateway/api/config") {
@@ -665,8 +699,9 @@ void FritzboxAha::mqtt_loop_() {
   if (xQueueReceive(mqtt_inputs_, &input, 0) == pdTRUE) {
     std::string result;
     float target = NAN;
-    auto parsed = gateway::parse_target_payload(input.payload, target);
     const auto *device = gateway::command_device(*c, input.topic);
+    const auto parsed = device && device->outlet ? gateway::parse_switch_payload(input.payload, target) :
+        gateway::parse_target_payload(input.payload, target);
     if (input.retained || input.duplicate || input.revision != c->revision ||
         web_millis() - input.created_at > 10000 || !mqtt_connected_ || !device) {
       mqtt_rejected_++; result = "Nicht gesendet: gespeicherte/doppelte/veraltete Nachricht oder keine Freigabe";
@@ -676,7 +711,7 @@ void FritzboxAha::mqtt_loop_() {
       mqtt_rejected_++; result = "Nicht gesendet: ungueltiger MQTT-Sollwert";
     } else {
       std::string error;
-      if (queue_temperature_(device->ain, target, error, input.revision)) {
+      if (queue_temperature_(device->ain, target, error, input.revision, device->outlet)) {
         mqtt_accepted_++; result = "MQTT-Auftrag angenommen; FRITZ!Box-Rueckmeldung wird geprueft";
       } else { mqtt_rejected_++; result = error; }
     }
@@ -759,16 +794,25 @@ void FritzboxAha::mqtt_publish_state_() {
   if (!fresh || observed == mqtt_last_observation_) return;
   bool sent = true;
   for (const auto &d : mqtt_config_->devices) {
-    for (const auto &t : devices) if (t.ain == d.ain && t.present == "1") {
-      auto publish = [&](const std::string &topic, float value, bool integer = false) {
+    for (const auto &t : devices) if (t.ain == d.ain && t.outlet == d.outlet && t.present == "1") {
+      auto publish = [&](const std::string &topic, double value, const char *format = "%.1f") {
         if (topic.empty() || !std::isfinite(value)) return;
-        char payload[24]; std::snprintf(payload, sizeof(payload), integer ? "%.0f" : "%.1f", value);
+        char payload[24]; std::snprintf(payload, sizeof(payload), format, value);
         // Retained measurements, with bounded outbox and broker PUBACK evidence.
         if (esp_mqtt_client_enqueue(mqtt_client_, topic.c_str(), payload, 0, 1, true, false) < 0) sent = false;
       };
+      if (d.outlet) {
+        const int state = protocol::outlet_state(t);
+        if (state >= 0) publish(d.state_topic, state, "%.0f");
+        publish(d.power_topic, protocol::meter_value(t.power), "%.3f");
+        publish(d.energy_topic, protocol::meter_value(t.energy), "%.3f");
+        publish(d.voltage_topic, protocol::meter_value(t.voltage), "%.3f");
+        publish(d.temperature_topic, protocol::decimal_temperature(t.celsius));
+        break;
+      }
       publish(d.actual_topic, protocol::actual_temperature(t));
       publish(d.target_topic, protocol::target_temperature(t));
-      publish(d.battery_topic, protocol::battery_percent(t), true);
+      publish(d.battery_topic, protocol::battery_percent(t), "%.0f");
     }
   }
   if (sent) mqtt_last_observation_ = observed;

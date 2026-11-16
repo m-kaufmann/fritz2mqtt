@@ -170,6 +170,8 @@ inline bool encode_target(float value, uint32_t &encoded) {
 
 struct Thermostat {
   std::string ain, name, product, present, celsius, tist, tsoll, battery, battery_low, error;
+  bool outlet = false;
+  std::string switch_state, switch_lock, switch_device_lock, switch_mode, power, energy, voltage, offset;
 };
 
 inline float decimal_temperature(const std::string &value) {
@@ -199,10 +201,18 @@ inline std::string target_mode(const Thermostat &t) {
       std::isnan(target_temperature(t)) ? "Unbekannt" : "Temperaturregelung";
 }
 
+inline int outlet_state(const Thermostat &d) {
+  return d.switch_state == "0" ? 0 : d.switch_state == "1" ? 1 : -1;
+}
+inline double meter_value(const std::string &value) {
+  uint32_t n;
+  return number(value, n, UINT32_MAX) ? static_cast<double>(n) / 1000 : NAN;
+}
+
 struct XmlResult {
   std::string sid, challenge, block_time;
   int device_count = 0;
-  std::vector<Thermostat> thermostats;
+  std::vector<Thermostat> thermostats, outlets;
 };
 
 // Expat checks XML well-formedness; DTDs are forbidden. No raw XML is logged.
@@ -261,10 +271,16 @@ class XmlReader {
         }
       }
       if (s.depth_ >= 3 && s.path_[1] == "device") {
+        if (s.depth_ == 3 && s.path_[2] == "switch") s.current_.outlet = true;
         if (s.depth_ == 3 && s.path_[2] == "hkr") s.has_hkr_ = true;
         if (s.depth_ == 3 && (s.path_[2] == "name" || s.path_[2] == "present" ||
             s.path_[2] == "battery" || s.path_[2] == "batterylow")) s.leaf_ = s.path_[2];
         if (s.depth_ == 4 && s.path_[2] == "temperature" && s.path_[3] == "celsius") s.leaf_ = "celsius";
+        if (s.depth_ == 4 && s.path_[2] == "temperature" && s.path_[3] == "offset") s.leaf_ = "offset";
+        if (s.depth_ == 4 && s.path_[2] == "switch" && (s.path_[3] == "state" || s.path_[3] == "lock" ||
+            s.path_[3] == "devicelock" || s.path_[3] == "mode")) s.leaf_ = s.path_[3];
+        if (s.depth_ == 4 && s.path_[2] == "powermeter" && (s.path_[3] == "power" ||
+            s.path_[3] == "energy" || s.path_[3] == "voltage")) s.leaf_ = s.path_[3];
         if (s.depth_ == 4 && s.path_[2] == "hkr" && (s.path_[3] == "tist" || s.path_[3] == "tsoll" ||
             s.path_[3] == "battery" || s.path_[3] == "batterylow" || s.path_[3] == "errorcode")) s.leaf_ = s.path_[3];
       }
@@ -292,15 +308,24 @@ class XmlReader {
       if (s.leaf_ == "battery" && !value.empty()) t.battery = value;
       if (s.leaf_ == "batterylow" && !value.empty()) t.battery_low = value;
       if (s.leaf_ == "celsius") t.celsius = value;
+      if (s.leaf_ == "state") t.switch_state = value;
+      if (s.leaf_ == "lock") t.switch_lock = value;
+      if (s.leaf_ == "devicelock") t.switch_device_lock = value;
+      if (s.leaf_ == "mode") t.switch_mode = value;
+      if (s.leaf_ == "offset") t.offset = value;
+      if (s.leaf_ == "power") t.power = value;
+      if (s.leaf_ == "energy") t.energy = value;
+      if (s.leaf_ == "voltage") t.voltage = value;
       if (s.leaf_ == "tist") t.tist = value;
       if (s.leaf_ == "tsoll") t.tsoll = value;
       if (s.leaf_ == "errorcode") t.error = value;
       s.leaf_.clear();
       s.field_.clear();
     }
-    if (s.root_ == "devicelist" && s.depth_ == 2 && s.path_[1] == "device" && s.has_hkr_) {
-      if (s.current_.ain.empty() || s.result_.thermostats.size() >= 32) { s.reject_(); return; }
-      s.result_.thermostats.push_back(s.current_);
+    if (s.root_ == "devicelist" && s.depth_ == 2 && s.path_[1] == "device" && (s.has_hkr_ || s.current_.outlet)) {
+      if (s.current_.ain.empty() || s.result_.thermostats.size() + s.result_.outlets.size() >= 32) { s.reject_(); return; }
+      s.current_.outlet = !s.has_hkr_;
+      (s.has_hkr_ ? s.result_.thermostats : s.result_.outlets).push_back(s.current_);
     }
     if (s.depth_ == 2) s.field_.clear();
     s.path_.pop_back();

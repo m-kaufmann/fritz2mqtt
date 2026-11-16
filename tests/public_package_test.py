@@ -50,7 +50,7 @@ class PublicPackage(unittest.TestCase):
         self.assertEqual(page, embedded)
         self.assertIn("namespace+'/'+config.location", page)
         self.assertIn("config.mqtt.topic_prefix", page)
-        self.assertIn("prefix+d.base+'/set'", page)
+        self.assertIn("['command_topic','Neuer-SOLL-Topic','/set']", page)
         self.assertIn('FRITZ2MQTT Gateway', page)
 
     def test_embedded_icons(self):

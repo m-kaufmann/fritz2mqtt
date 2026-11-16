@@ -8,6 +8,10 @@ int main(){
  for(auto s:{"8","20.0","20.5","28"," 18.50\r\n"})assert(parse_target_payload(s,v)==TargetPayload::TARGET);
  for(auto s:{""," ","nan","inf","1e1","20x","20,5","7.5","28.5","20.1","-20","+20","20.",".5","9999999999999999","{\"value\":20}"})assert(parse_target_payload(s,v)==TargetPayload::INVALID);
  assert(parse_target_payload(std::string("20\0x",4),v)==TargetPayload::INVALID);
+ assert(parse_switch_payload(" 0.00 ",v)==TargetPayload::TARGET && v==0);
+ assert(parse_switch_payload("1",v)==TargetPayload::TARGET && v==1);
+ assert(parse_switch_payload("9.9",v)==TargetPayload::IGNORE);
+ for(auto s:{"", "ON", "1.1", "20", "-1"})assert(parse_switch_payload(s,v)==TargetPayload::INVALID);
  Config c;Device a;a.ain="A";a.enabled=true;a.command_topic="site/11/d_s_o/a";Device b=a;b.ain="B";b.command_topic="site/12/d_s_o/b";c.devices={a,b};
  assert(command_device(c,"site/11/d_s_o/a")->ain=="A");assert(command_device(c,"site/12/d_s_o/b")->ain=="B");
  assert(!command_device(c,"site/11/d_s_o/ax"));assert(!command_device(c,""));c.devices[0].enabled=false;assert(!command_device(c,a.command_topic));

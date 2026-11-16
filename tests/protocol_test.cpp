@@ -65,6 +65,19 @@ int main() {
   assert(result.thermostats.size() == 1 && std::isnan(actual_temperature(result.thermostats[0])));
   assert(!xml.parse("<devicelist><device><hkr/></device></devicelist>", "devicelist", result));
   assert(xml.parse("<devicelist/>", "devicelist", result) && result.thermostats.empty());
+  assert(xml.parse(R"(<devicelist><device identifier="energy"><present>1</present>
+    <switch><state>0</state><mode>auto</mode><lock>0</lock><devicelock>1</devicelock></switch>
+    <powermeter><power>12500</power><energy>707</energy><voltage>230252</voltage></powermeter>
+    <temperature><celsius>285</celsius><offset>-2</offset></temperature></device>
+    <device identifier="hkr"><hkr/></device><group identifier="group"><switch/></group></devicelist>)",
+    "devicelist", result));
+  assert(result.outlets.size() == 1 && result.thermostats.size() == 1);
+  const auto &outlet = result.outlets[0];
+  assert(outlet.ain == "energy" && outlet_state(outlet) == 0);
+  assert(outlet.switch_mode == "auto" && outlet.switch_lock == "0" && outlet.switch_device_lock == "1");
+  assert(meter_value(outlet.power) == 12.5 && meter_value(outlet.energy) == 0.707);
+  assert(meter_value(outlet.voltage) == 230.252 && actual_temperature(outlet) == 28.5);
+  assert(meter_value("0") == 0 && std::isnan(meter_value("")) && std::isnan(meter_value("4294967296")));
   std::string many = "<devicelist>";
   for (int j = 0; j < 33; ++j) many += "<device identifier='x'><hkr/></device>";
   assert(!xml.parse(many + "</devicelist>", "devicelist", result));
