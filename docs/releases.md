@@ -8,3 +8,11 @@
 Versionsnummer, Hardwareprofil, Flash-/Partitionslayout und Konfigurationsschema müssen getrennt geführt werden. Das Schema `config_v1` bleibt im ersten Schritt unverändert. Für vorhandene Installationen kann `storage_namespace` gezielt auf den bisherigen Namensraum gesetzt werden; die generische Firmware liest ausschließlich ihren konfigurierten Namensraum. Neue Standardwerte überschreiben keine erfolgreich gelesene Konfiguration.
 
 Zwei getrennte Kanäle: stabil und Testkanal (`testing`). Regelmäßiges Prüfen darf keine automatische Installation auslösen. HTTPS mit Zertifikatsprüfung ist erforderlich. Prüfsummen ersetzen keine Herausgebersignatur. Safe Mode ist eine Wiederherstellungshilfe; Rückfall auf alte Firmware und deren Konfigurationskompatibilität sind separat zu prüfen.
+
+## Stable 0.1.18
+
+Die Veröffentlichung vom 20.11.2026 wurde vom Betreiber auf Basis der lokalen
+Simulationen und des erfolgreichen ESP32-Builds freigegeben. Die
+Hardwareabnahme mit realen Befehlsgruppen steht noch aus.
+Das Release enthält OTA- und Factory-Firmware, die zugeordneten Quellen,
+Lizenztexte, Buildinformationen und Prüfsummen.

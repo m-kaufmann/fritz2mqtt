@@ -118,9 +118,9 @@ inline TargetPayload parse_switch_payload(const std::string &payload, float &out
   out = value.front() - '0';
   return TargetPayload::TARGET;
 }
-inline const Device *command_device(const Config &c, const std::string &topic) {
+inline const Device *command_device(const Config &c, const std::string &topic, bool enabled_only = true) {
   if (topic.empty()) return nullptr;
-  for (const auto &d : c.devices) if (d.enabled && d.command_topic == topic) return &d;
+  for (const auto &d : c.devices) if ((!enabled_only || d.enabled) && d.command_topic == topic) return &d;
   return nullptr;
 }
 inline const Device *find(const Config &c, const std::string &ain) {

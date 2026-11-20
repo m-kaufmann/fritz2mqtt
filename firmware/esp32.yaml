@@ -1,7 +1,7 @@
 # Generic factory build: configure credentials and topics in the gateway UI.
 substitutions:
   name: fritz2mqtt
-  firmware_version: 0.1.17-dev
+  firmware_version: 0.1.18-dev
 esphome:
   name: ${name}
   name_add_mac_suffix: true
