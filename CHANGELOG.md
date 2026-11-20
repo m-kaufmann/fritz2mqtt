@@ -1,6 +1,6 @@
 # Änderungen
 
-## 0.1.18-dev – MQTT Sollwertgruppen (20.11.2026)
+## 0.1.18 – Stable (20.11.2026)
 
 - Gültige Stellaufträge für mehrere Geräte werden begrenzt gepuffert und im HTTP-Worker seriell abgearbeitet.
 - Ein neuer wartender Sollwert desselben Geräts ersetzt dessen vorherigen wartenden Sollwert am bisherigen FIFO-Platz. Neutralwerte lassen wartende Aufträge bestehen.

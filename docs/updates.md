@@ -102,3 +102,17 @@ enthält OTA- und Factory-Firmware für `esp32-4mb-v1`, Quellen, Lizenzen und
 Prüfsummen. Bestehende Geräte finden das Update unter **System / Firmware →
 Nach Updates suchen**. Die Änderungen zur FRITZ!Smart Energy 200 stehen im
 [Änderungsprotokoll](../CHANGELOG.md#0117--stable-16112026).
+
+## Stable 0.1.18
+
+Der [stabile Download 0.1.18](https://github.com/m-kaufmann/fritz2mqtt/releases/tag/v0.1.18)
+enthält die Korrektur für zeitgleich eintreffende MQTT-Sollwertbefehle.
+Bis zu acht wartende Geräteaufträge werden seriell abgearbeitet.
+Pro Gerät bleibt der letzte gültige wartende Sollwert erhalten, Neutralwerte
+verändern die Warteschlange nicht. Aufträge verfallen nach drei Minuten ab
+Empfang. Die [Verifikation und Diagnose](mqtt-command-buffer.md) beschreiben
+die Regeln und die lokal simulierten Fehlerfälle.
+
+Bestehende Geräte finden die Version unter **System / Firmware → Nach Updates
+suchen**. Die Installation erfolgt nach Bestätigung am Gateway. Die
+Hardwareabnahme mit realen zeitgleichen Befehlsgruppen steht noch aus.
