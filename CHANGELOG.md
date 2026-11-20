@@ -1,5 +1,11 @@
 # Änderungen
 
+## 0.1.18-dev – MQTT Sollwertgruppen (20.11.2026)
+
+- Gültige Stellaufträge für mehrere Geräte werden begrenzt gepuffert und im HTTP-Worker seriell abgearbeitet.
+- Ein neuer wartender Sollwert desselben Geräts ersetzt dessen vorherigen wartenden Sollwert am bisherigen FIFO-Platz. Neutralwerte lassen wartende Aufträge bestehen.
+- Drei Minuten maximale Wartezeit ab Empfang und Diagnosezähler pro Gerät. Einzelheiten und lokale Prüffälle stehen in [MQTT Sollwertgruppen](docs/mqtt-command-buffer.md).
+
 ## 0.1.17 – Stable (16.11.2026)
 
 - Unterstützung für FRITZ!Smart Energy 200 über die FRITZ!Box. Steckdosen und Thermostate lassen sich gemeinsam in einem Gateway zuordnen.

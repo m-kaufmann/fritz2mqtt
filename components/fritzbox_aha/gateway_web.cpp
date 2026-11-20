@@ -322,35 +322,43 @@ bool FritzboxAha::save_config_(const gateway::Config &c) {
   return ok;
 }
 
-bool FritzboxAha::queue_temperature_(const std::string &ain, float target, std::string &error, uint32_t expected_revision, bool outlet) {
-  uint32_t encoded;
-  if (outlet ? (target != 0 && target != 1) : !protocol::encode_target(target, encoded)) { error = outlet ? "Nicht gesendet: Schaltwert muss 0 oder 1 sein" :
-      "Nicht gesendet: Zielwert ausserhalb 8 bis 28 C"; return false; }
+bool FritzboxAha::queue_temperature_(const std::string &ain, float target, std::string &error,
+    uint32_t expected_revision, bool outlet, uint32_t received_at) {
+  // All callers, including direct/legacy requests, preserve a pending target on 9.9.
+  if (protocol::no_command(target)) {
+    xSemaphoreTake(web_mutex_, portMAX_DELAY);
+    command_buffer_.ignore(ain, web_millis());
+    xSemaphoreGive(web_mutex_);
+    return true;
+  }
   xSemaphoreTake(web_mutex_, portMAX_DELAY);
+  const uint32_t now = web_millis();
+  auto reject = [&](const char *reason) {
+    error = reason;
+    command_buffer_.reject(ain, error, now);
+    xSemaphoreGive(web_mutex_);
+    return false;
+  };
   auto config = runtime_config_;
   const auto *mapping = gateway::find(*config, ain);
-  bool ready = false;
-  for (const auto &d : web_devices_) if (d.ain == ain && d.outlet == outlet && d.present == "1" &&
-      (outlet ? protocol::outlet_state(d) >= 0 && d.switch_lock != "1" : d.error.empty() || d.error == "0")) ready = true;
-  if (firmware_state_.installing || firmware_action_ == 2) {
-    xSemaphoreGive(web_mutex_); error = "Firmwareinstallation aktiv"; return false;
-  }
-  if ((expected_revision != UINT32_MAX && config->revision != expected_revision) ||
-      !mapping || mapping->outlet != outlet || !mapping->enabled || !commands_ || !web_last_.connected || !web_last_.authenticated ||
-      web_last_.device_count < 0 || web_revision_ != config->revision || web_millis() - web_observation_at_ > 120000 || !ready) {
-    xSemaphoreGive(web_mutex_); error = "Nicht gesendet: Thermostat nicht freigegeben oder keine aktuellen Daten"; return false;
-  }
-  bool expected = false;
-  if (!command_busy_.compare_exchange_strong(expected, true)) {
-    xSemaphoreGive(web_mutex_); error = "Ein Auftrag laeuft bereits; bitte Rueckmeldung abwarten"; return false;
-  }
+  if (firmware_state_.installing || firmware_action_ == 2) return reject("Firmwareinstallation aktiv");
+  if (!requests_ || (expected_revision != UINT32_MAX && config->revision != expected_revision) ||
+      !mapping || mapping->outlet != outlet || !mapping->enabled)
+    return reject("Nicht gesendet: Geraet nicht freigegeben oder Einrichtung geaendert");
+  // Known mappings may wait through transient network/session failures. The worker
+  // obtains fresh device data and validates the session immediately before writing.
   Command command;
   std::snprintf(command.ain, sizeof(command.ain), "%s", ain.c_str());
-  command.target = target; command.outlet = outlet; command.created_at = web_millis(); command.revision = config->revision;
-  if (xQueueSend(commands_, &command, 0) != pdTRUE) {
-    command_busy_ = false; xSemaphoreGive(web_mutex_); error = "Auftragsspeicher belegt"; return false;
+  command.target = target; command.outlet = outlet;
+  command.created_at = received_at == UINT32_MAX ? now : received_at;
+  command.revision = config->revision;
+  if (!command_buffer_.enqueue(command, *config, now, error)) {
+    xSemaphoreGive(web_mutex_); return false;
   }
-  web_command_ain_ = ain; web_command_message_ = "Auftrag angenommen; Rueckmeldung wird geprueft";
+  command_busy_ = command_buffer_.busy();
+  if (!command_buffer_.running()) {
+    web_command_ain_ = ain; web_command_message_ = "Auftrag gepuffert; Rueckmeldung wird geprueft";
+  }
   xSemaphoreGive(web_mutex_);
   xSemaphoreGive(requests_);
   return true;
@@ -422,6 +430,8 @@ std::string FritzboxAha::status_json_() {
     r["wifi_ssid"] = wifi->is_connected() ? std::string(wifi->get_sta().get_ssid().c_str()) : std::string();
     r["ap_ssid"] = std::string(wifi->get_ap().get_ssid().c_str());
     r["ap_address"] = "192.168.4.1";
+    r["command_pending"] = command_buffer_.pending();
+    r["command_max_age_ms"] = gateway::CommandBuffer::MAX_AGE_MS;
     r["busy"] = command_busy_.load(); r["command_ain"] = web_command_ain_; r["command_message"] = web_command_message_;
     auto rows = r["devices"].to<JsonArray>();
     std::set<std::string> emitted;
@@ -432,6 +442,19 @@ std::string FritzboxAha::status_json_() {
       row["name"] = cfg && (cfg->outlet || cfg->name != "Thermostat") ? cfg->name : t && !t->name.empty() ? t->name : cfg ? cfg->name : ain;
       row["model"] = t ? t->product : ""; row["configured"] = cfg != nullptr;
       row["enabled"] = cfg && cfg->enabled;
+      auto cmd = row["command"].to<JsonObject>();
+      cmd["pending"] = command_buffer_.waiting(ain);
+      cmd["running"] = command_buffer_.running() && command_buffer_.active().ain == ain;
+      if (const auto *d = command_buffer_.diagnostic(ain)) {
+        cmd["state"] = d->state; cmd["message"] = d->message;
+        cmd["id"] = d->id; cmd["at_ms"] = d->at_ms;
+        if (std::isfinite(d->last_attempted_target)) cmd["last_attempted_target"] = d->last_attempted_target;
+        cmd["accepted"] = d->accepted; cmd["replaced"] = d->replaced;
+        cmd["ignored"] = d->ignored; cmd["rejected"] = d->rejected;
+        cmd["overflow"] = d->overflow; cmd["expired"] = d->expired;
+        cmd["attempted"] = d->attempted; cmd["finished"] = d->finished;
+        cmd["deferred"] = d->deferred; cmd["superseded"] = d->superseded;
+      }
       const bool outlet = cfg ? cfg->outlet : t->outlet;
       row["outlet"] = outlet;
       bool available = fresh && t && t->outlet == outlet && t->present == "1";
@@ -671,17 +694,28 @@ void FritzboxAha::mqtt_event_(void *arg, esp_event_base_t, int32_t id, void *dat
       break;
     case MQTT_EVENT_DATA: {
       self->mqtt_rx_++;
-      if (!self->mqtt_inputs_ || e->current_data_offset != 0 || e->total_data_len != e->data_len ||
+      auto reject_input = [&](const char *reason, bool overflow = false) {
+        self->mqtt_rejected_++;
+        if (!e->topic || e->topic_len < 1 || e->topic_len > 160 ||
+            std::memchr(e->topic, '\0', e->topic_len)) return;
+        xSemaphoreTake(self->web_mutex_, portMAX_DELAY);
+        const auto *device = gateway::command_device(*self->runtime_config_,
+            std::string(e->topic, e->topic_len), false);
+        if (device) self->command_buffer_.reject(device->ain, reason, web_millis(), overflow);
+        xSemaphoreGive(self->web_mutex_);
+      };
+      if (!self->mqtt_inputs_ || !e->data || !e->topic || e->current_data_offset != 0 || e->total_data_len != e->data_len ||
           e->data_len < 1 || e->data_len > 32 || e->topic_len < 1 || e->topic_len > 160 ||
           std::memchr(e->data, '\0', e->data_len) || std::memchr(e->topic, '\0', e->topic_len)) {
-        self->mqtt_rejected_++; break;
+        reject_input("MQTT-Nachricht unvollstaendig oder ungueltig"); break;
       }
       MqttInput input;
       std::memcpy(input.topic, e->topic, e->topic_len);
       std::memcpy(input.payload, e->data, e->data_len);
       input.retained = e->retain; input.duplicate = e->dup;
       input.revision = self->mqtt_active_revision_.load(); input.created_at = web_millis();
-      if (xQueueSend(self->mqtt_inputs_, &input, 0) != pdTRUE) self->mqtt_rejected_++;
+      if (xQueueSend(self->mqtt_inputs_, &input, 0) != pdTRUE)
+        reject_input("MQTT-Empfangspuffer voll", true);
       break;
     }
     default: break;
@@ -690,7 +724,7 @@ void FritzboxAha::mqtt_event_(void *arg, esp_event_base_t, int32_t id, void *dat
 
 void FritzboxAha::mqtt_loop_() {
   if (!mqtt_inputs_) {
-    mqtt_inputs_ = xQueueCreate(8, sizeof(MqttInput));
+    mqtt_inputs_ = xQueueCreate(32, sizeof(MqttInput));
     if (!mqtt_inputs_) { mqtt_message_("MQTT-Empfangsspeicher fehlt"); return; }
   }
   auto c = config_copy_();
@@ -700,6 +734,7 @@ void FritzboxAha::mqtt_loop_() {
     std::string result;
     float target = NAN;
     const auto *device = gateway::command_device(*c, input.topic);
+    const auto *diagnostic_device = gateway::command_device(*c, input.topic, false);
     const auto parsed = device && device->outlet ? gateway::parse_switch_payload(input.payload, target) :
         gateway::parse_target_payload(input.payload, target);
     if (input.retained || input.duplicate || input.revision != c->revision ||
@@ -707,15 +742,24 @@ void FritzboxAha::mqtt_loop_() {
       mqtt_rejected_++; result = "Nicht gesendet: gespeicherte/doppelte/veraltete Nachricht oder keine Freigabe";
     } else if (parsed == gateway::TargetPayload::IGNORE) {
       mqtt_ignored_++; result = "Kein Stellauftrag (9.9); nichts an FRITZ!Box gesendet";
+      xSemaphoreTake(web_mutex_, portMAX_DELAY);
+      command_buffer_.ignore(device->ain, web_millis());
+      xSemaphoreGive(web_mutex_);
     } else if (parsed == gateway::TargetPayload::INVALID) {
       mqtt_rejected_++; result = "Nicht gesendet: ungueltiger MQTT-Sollwert";
     } else {
       std::string error;
-      if (queue_temperature_(device->ain, target, error, input.revision, device->outlet)) {
+      if (queue_temperature_(device->ain, target, error, input.revision, device->outlet, input.created_at)) {
         mqtt_accepted_++; result = "MQTT-Auftrag angenommen; FRITZ!Box-Rueckmeldung wird geprueft";
       } else { mqtt_rejected_++; result = error; }
     }
-    xSemaphoreTake(web_mutex_, portMAX_DELAY); mqtt_last_input_ = result; xSemaphoreGive(web_mutex_);
+    xSemaphoreTake(web_mutex_, portMAX_DELAY);
+    if (diagnostic_device && (!device || input.retained || input.duplicate || input.revision != c->revision ||
+        web_millis() - input.created_at > 10000 || !mqtt_connected_ ||
+        parsed == gateway::TargetPayload::INVALID))
+      command_buffer_.reject(diagnostic_device->ain, result, web_millis());
+    mqtt_last_input_ = result;
+    xSemaphoreGive(web_mutex_);
   }
   uint32_t now = web_millis();
   if (mqtt_next_check_ && static_cast<int32_t>(now - mqtt_next_check_) < 0) return;

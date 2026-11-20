@@ -7,6 +7,7 @@
 #include "mqtt_client.h"
 #include "aha_protocol.h"
 #include "runtime_config.h"
+#include "command_buffer.h"
 #include "http_request_body.h"
 #include "firmware_policy.h"
 #ifdef USE_FRITZ2MQTT_UPDATE
@@ -94,7 +95,8 @@ class FritzboxAha : public PollingComponent, public AsyncWebHandler, public wifi
     char mode[32] = "Unbekannt", battery_status[32] = "Unbekannt";
     float temperature = NAN, target = NAN, battery = NAN;
   };
-  struct Command { char ain[257] = ""; float target = NAN; bool outlet = false; uint32_t created_at = 0; uint32_t revision = 0; };
+  using Command = gateway::CommandBuffer::Command;
+  gateway::CommandBuffer command_buffer_;
   struct CommandResult { char message[160] = ""; };
   bool allow_control_ = false;
   std::atomic<bool> command_busy_{false};
@@ -159,17 +161,17 @@ class FritzboxAha : public PollingComponent, public AsyncWebHandler, public wifi
   void init_web_();
   void apply_runtime_config_();
   std::shared_ptr<const gateway::Config> config_copy_();
-  bool queue_temperature_(const std::string &ain, float target, std::string &error, uint32_t expected_revision = UINT32_MAX, bool outlet = false);
+  bool queue_temperature_(const std::string &ain, float target, std::string &error, uint32_t expected_revision = UINT32_MAX, bool outlet = false, uint32_t received_at = UINT32_MAX);
   std::string status_json_();
   std::string config_json_(const gateway::Config &config, bool secrets);
   bool decode_config_(const std::string &body, const gateway::Config &previous, gateway::Config &out, std::string &error);
   bool save_config_(const gateway::Config &config);
   void serve_json_(AsyncWebServerRequest *request, int code, const std::string &body);
   uint32_t observation_at_ = 0;
-  QueueHandle_t commands_ = nullptr, command_results_ = nullptr;
+  QueueHandle_t command_results_ = nullptr;
   text_sensor::TextSensor *command_status_ = nullptr;
   void execute_command_(const Command &command);
-  void command_result_(const std::string &message);
+  void command_result_(const std::string &message, const char *state = "finished");
   struct HttpResult {
     bool complete = false;
     int status = 0;

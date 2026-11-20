@@ -24,11 +24,9 @@ void FritzboxAha::setup() {
   firmware_setup_();
   results_ = xQueueCreate(1, sizeof(Snapshot));
   requests_ = xSemaphoreCreateBinary();
-  commands_ = xQueueCreate(1, sizeof(Command));
   command_results_ = xQueueCreate(1, sizeof(CommandResult));
-  if (!results_ || !requests_ || !commands_ || !command_results_ ||
+  if (!results_ || !requests_ || !command_results_ ||
       xTaskCreate(worker_entry_, "fritz_aha", 12288, this, 1, &worker_) != pdPASS) {
-    if (commands_) { vQueueDelete(commands_); commands_ = nullptr; }
     if (command_results_) { vQueueDelete(command_results_); command_results_ = nullptr; }
     if (results_) { vQueueDelete(results_); results_ = nullptr; }
     if (requests_) { vSemaphoreDelete(requests_); requests_ = nullptr; }
@@ -51,7 +49,6 @@ void FritzboxAha::loop() {
   mqtt_loop_();
   CommandResult result;
   if (command_results_ && xQueueReceive(command_results_, &result, 0) == pdTRUE) {
-    command_busy_ = false;
     if (command_status_) command_status_->publish_state(result.message);
   }
   Snapshot next;
@@ -118,12 +115,29 @@ void FritzboxAha::dump_config() {
 void FritzboxAha::worker_entry_(void *arg) { static_cast<FritzboxAha *>(arg)->worker_run_(); }
 void FritzboxAha::worker_run_() {
   while (true) {
-    if (xSemaphoreTake(requests_, portMAX_DELAY) == pdTRUE) {
-      apply_runtime_config_();
-      Command command;
-      if (xQueueReceive(commands_, &command, 0) == pdTRUE) execute_command_(command);
-      else cycle_();
+    // Pending work also wakes by timeout. Binary semaphore signals can coalesce.
+    xSemaphoreTake(web_mutex_, portMAX_DELAY);
+    const bool waiting = command_buffer_.pending() > 0;
+    xSemaphoreGive(web_mutex_);
+    const bool requested = xSemaphoreTake(requests_, waiting ? pdMS_TO_TICKS(1000) : portMAX_DELAY) == pdTRUE;
+    apply_runtime_config_();
+    Command command;
+    xSemaphoreTake(web_mutex_, portMAX_DELAY);
+    const bool started = command_buffer_.start(*runtime_config_, worker_millis(), command);
+    command_busy_ = command_buffer_.busy();
+    if (started) {
+      web_command_ain_ = command.ain;
+      web_command_message_ = "Auftrag wird bearbeitet";
     }
+    xSemaphoreGive(web_mutex_);
+    if (started) {
+      execute_command_(command);
+      xSemaphoreTake(web_mutex_, portMAX_DELAY);
+      const bool more = command_buffer_.pending() > 0;
+      const bool deferred = command_buffer_.was_deferred();
+      xSemaphoreGive(web_mutex_);
+      if (more && !deferred) xSemaphoreGive(requests_);
+    } else if (requested) cycle_();
   }
 }
 
@@ -140,9 +154,11 @@ void FritzboxAha::request_target_temperature(float value) {
   }
 }
 
-void FritzboxAha::command_result_(const std::string &message) {
+void FritzboxAha::command_result_(const std::string &message, const char *state) {
   xSemaphoreTake(web_mutex_, portMAX_DELAY);
   web_command_message_ = message;
+  command_buffer_.finish(message, worker_millis(), state);
+  command_busy_ = command_buffer_.busy();
   xSemaphoreGive(web_mutex_);
   CommandResult result;
   std::snprintf(result.message, sizeof(result.message), "%s", message.c_str());
@@ -154,24 +170,54 @@ void FritzboxAha::execute_command_(const Command &command) {
   auto config = config_copy_();
   const auto *mapping = gateway::find(*config, command.ain);
   uint32_t encoded = 0;
-  if (!network_ready_.load() || !mapping || !mapping->enabled || config->revision != command.revision ||
-      mapping->outlet != command.outlet ||
-      (!command.outlet && !protocol::encode_target(command.target, encoded)) || worker_millis() - command.created_at > 15000 ||
-      (retry_at_ && static_cast<int32_t>(worker_millis() - retry_at_) < 0)) {
-    command_result_("Nicht gesendet: Auftrag ungueltig, veraltet oder Verbindung in Wartezeit"); return;
+  auto defer = [&](const char *reason) {
+    xSemaphoreTake(web_mutex_, portMAX_DELAY);
+    command_buffer_.defer(reason, worker_millis());
+    command_busy_ = command_buffer_.busy();
+    web_command_message_ = reason;
+    xSemaphoreGive(web_mutex_);
+  };
+  if (gateway::CommandBuffer::expired(command, worker_millis())) {
+    command_result_("Nicht gesendet: Auftrag abgelaufen", "expired"); return;
   }
-  if (sid_.empty() || !discover_devices_()) {
-    command_result_("Nicht gesendet: Session nicht bereit; bitte erneut versuchen"); return;
+  if (!mapping || !mapping->enabled || config->revision != command.revision ||
+      mapping->outlet != command.outlet ||
+      (command.outlet ? command.target != 0 && command.target != 1 : !protocol::encode_target(command.target, encoded))) {
+    command_result_("Nicht gesendet: Auftrag ungueltig oder Einrichtung geaendert", "rejected"); return;
+  }
+  if (!network_ready_.load() || (retry_at_ && static_cast<int32_t>(worker_millis() - retry_at_) < 0)) {
+    defer("Warte auf Verbindung oder HTTP-Wartezeit"); return;
+  }
+  if ((sid_.empty() && !login_()) || !discover_devices_()) {
+    defer("Warte auf Session oder erfolgreiche Geraeteabfrage"); return;
+  }
+  if (gateway::CommandBuffer::expired(command, worker_millis())) {
+    command_result_("Nicht gesendet: Auftrag waehrend der Vorpruefung abgelaufen", "expired"); return;
   }
   const protocol::Thermostat *selected = nullptr;
   for (const auto &t : discovered_) if (t.ain == command.ain) {
-    if (selected) { command_result_("Nicht gesendet: AIN nicht eindeutig"); return; }
+    if (selected) { command_result_("Nicht gesendet: AIN nicht eindeutig", "rejected"); return; }
     selected = &t;
   }
   if (!selected || selected->outlet != command.outlet || selected->present != "1" ||
       (command.outlet && (selected->switch_lock == "1" || protocol::outlet_state(*selected) < 0)) || (!selected->error.empty() && selected->error != "0") ||
-      config_copy_()->revision != command.revision || worker_millis() - command.created_at > 15000) {
-    command_result_("Nicht gesendet: Thermostat nicht bereit oder Einrichtung geaendert"); return;
+      config_copy_()->revision != command.revision) {
+    command_result_("Nicht gesendet: Geraet nicht bereit oder Einrichtung geaendert", "rejected"); return;
+  }
+  xSemaphoreTake(web_mutex_, portMAX_DELAY);
+  const bool superseded = command_buffer_.superseded();
+  const bool expired = gateway::CommandBuffer::expired(command, worker_millis());
+  const bool changed = runtime_config_->revision != command.revision;
+  if (!superseded && !expired && !changed) command_buffer_.attempted(worker_millis());
+  xSemaphoreGive(web_mutex_);
+  if (expired) {
+    command_result_("Nicht gesendet: Auftrag vor dem Schreiben abgelaufen", "expired"); return;
+  }
+  if (changed) {
+    command_result_("Nicht gesendet: Einrichtung vor dem Schreiben geaendert", "rejected"); return;
+  }
+  if (superseded) {
+    command_result_("Nicht gesendet: Neuerer Sollwert wartet bereits", "superseded"); return;
   }
   // Exactly one write. Ambiguous network outcomes must never trigger an automatic replay.
   const bool on = command.target == 1;
